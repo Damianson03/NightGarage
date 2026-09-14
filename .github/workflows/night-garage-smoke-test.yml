@@ -1,4 +1,4 @@
-name: Night Garage v0.2.1 - Black Screen Hotfix
+name: Night Garage v0.2.2 - GDScript Type Hotfix
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply v0.2.1 black screen hotfix
+      - name: Apply v0.2.2 GDScript type hotfix
         shell: bash
         run: |
           test -f game/scripts/main.gd
@@ -37,7 +37,7 @@ jobs:
           from pathlib import Path
 
           main_path = Path("game/scripts/main.gd")
-          text = main_path.read_text(encoding="utf-8")
+          main = main_path.read_text(encoding="utf-8")
 
           old_ready = '''func _ready() -> void:
               _build_world()
@@ -46,16 +46,14 @@ jobs:
           '''
 
           new_ready = '''func _ready() -> void:
-              # Build UI first. Even if the 3D scene has a device-specific problem,
-              # the app will no longer stay on a completely black screen.
               _build_ui()
               _build_world()
               _apply_screen()
               _update_ui()
           '''
 
-          if old_ready in text:
-              text = text.replace(old_ready, new_ready, 1)
+          if old_ready in main:
+              main = main.replace(old_ready, new_ready, 1)
 
           old_camera = '''    camera = Camera3D.new()
               add_child(camera)
@@ -66,22 +64,20 @@ jobs:
               camera.current = true
           '''
 
-          if old_camera in text:
-              text = text.replace(old_camera, new_camera, 1)
+          if old_camera in main:
+              main = main.replace(old_camera, new_camera, 1)
 
-          text = text.replace(
+          main = main.replace(
               "    moon.shadow_enabled = true\n",
               "    moon.shadow_enabled = false\n",
               1,
           )
 
-          start = text.find("func _add_lamp(x: float, z: float) -> void:")
-          end = text.find("\n\nfunc _add_box(", start)
+          lamp_start = main.find("func _add_lamp(x: float, z: float) -> void:")
+          lamp_end = main.find("\n\nfunc _add_box(", lamp_start)
 
-          if start == -1 or end == -1:
-              raise SystemExit("Could not find _add_lamp() in main.gd")
-
-          safe_lamp = '''func _add_lamp(x: float, z: float) -> void:
+          if lamp_start != -1 and lamp_end != -1:
+              safe_lamp = '''func _add_lamp(x: float, z: float) -> void:
               _add_box(
                   Vector3(x, 2.6, z),
                   Vector3(0.10, 5.2, 0.10),
@@ -90,26 +86,102 @@ jobs:
                   0.65
               )
           '''
+              main = main[:lamp_start] + safe_lamp + main[lamp_end:]
 
-          text = text[:start] + safe_lamp + text[end:]
-          main_path.write_text(text, encoding="utf-8")
+          replacements = {
+              "    var player_z := -state.player_distance\n":
+                  "    var player_z: float = -float(state.player_distance)\n",
+
+              "        var cost := state.upgrade_cost(i)\n":
+                  "        var cost: int = int(state.upgrade_cost(i))\n",
+
+              "    var t := clamp((value - edge0) / max(0.0001, edge1 - edge0), 0.0, 1.0)\n":
+                  "    var t: float = clampf((value - edge0) / maxf(0.0001, edge1 - edge0), 0.0, 1.0)\n",
+          }
+
+          for old, new in replacements.items():
+              main = main.replace(old, new)
+
+          main_path.write_text(main, encoding="utf-8")
 
           state_path = Path("game/scripts/game_state.gd")
           state = state_path.read_text(encoding="utf-8")
+
           state = state.replace(
               'const GAME_VERSION := "v0.2.0"',
-              'const GAME_VERSION := "v0.2.1"',
+              'const GAME_VERSION := "v0.2.2"',
           )
+
+          state = state.replace(
+              'const GAME_VERSION := "v0.2.1"',
+              'const GAME_VERSION := "v0.2.2"',
+          )
+
+          state = state.replace(
+              'const GEAR_RATIOS := [3.77, 1.96, 1.28, 0.88, 0.67]',
+              'const GEAR_RATIOS: Array[float] = [3.77, 1.96, 1.28, 0.88, 0.67]',
+          )
+
+          state = state.replace(
+              'const UPGRADE_BASE_COST := [22000, 28000, 18000, 16000, 14000, 17000]',
+              'const UPGRADE_BASE_COST: Array[int] = [22000, 28000, 18000, 16000, 14000, 17000]',
+          )
+
+          state = state.replace(
+              'var upgrades := [0, 0, 0, 0, 0, 0]',
+              'var upgrades: Array[int] = [0, 0, 0, 0, 0, 0]',
+          )
+
+          state = state.replace(
+              '    var dt := min(delta, 0.05)',
+              '    var dt: float = minf(delta, 0.05)',
+          )
+
+          state = state.replace(
+              '        var target_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))',
+              '        var target_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))',
+          )
+
+          state = state.replace(
+              '        var launch_fade := max(0.0, 1.0 - race_time / 2.2)',
+              '        var launch_fade: float = maxf(0.0, 1.0 - race_time / 2.2)',
+          )
+
+          state = state.replace(
+              '    var coupled_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))',
+              '    var coupled_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))',
+          )
+
+          state = state.replace(
+              '        var coupling := clamp(race_time / 0.90, 0.0, 1.0)',
+              '        var coupling: float = clampf(race_time / 0.90, 0.0, 1.0)',
+          )
+
+          state = state.replace(
+              '    var r := max(700.0, engine_rpm)',
+              '    var r: float = maxf(700.0, engine_rpm)',
+          )
+
+          state = state.replace(
+              '    var aero_fade := max(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)',
+              '    var aero_fade: float = maxf(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)',
+          )
+
+          state = state.replace(
+              '    var level := upgrades[index]',
+              '    var level: int = int(upgrades[index])',
+          )
+
           state_path.write_text(state, encoding="utf-8")
           PY
 
-          echo "===== HOTFIX CHECK ====="
-          grep -n "func _ready" -A8 game/scripts/main.gd
-          grep -n "camera.current" game/scripts/main.gd
-          grep -n "func _add_lamp" -A10 game/scripts/main.gd
+          echo "===== TYPE HOTFIX CHECK ====="
+          grep -n "player_z" game/scripts/main.gd
+          grep -n "var cost" game/scripts/main.gd
+          grep -n "var t:" game/scripts/main.gd
           grep -n "GAME_VERSION" game/scripts/game_state.gd
 
-      - name: Commit hotfix source
+      - name: Commit v0.2.2 source
         shell: bash
         run: |
           git config user.name "github-actions"
@@ -118,9 +190,9 @@ jobs:
           git add game/scripts/main.gd game/scripts/game_state.gd
 
           if git diff --cached --quiet; then
-            echo "v0.2.1 source already present."
+            echo "v0.2.2 source already present."
           else
-            git commit -m "Fix Android black screen in v0.2.1 [skip ci]"
+            git commit -m "Fix GDScript type errors in v0.2.2 [skip ci]"
             git push
           fi
 
@@ -184,7 +256,7 @@ jobs:
           KEYSTORE_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
           test -f "$KEYSTORE_PATH"
 
-          cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF2
+          cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
@@ -193,7 +265,7 @@ jobs:
           export/android/debug_keystore = "$KEYSTORE_PATH"
           export/android/debug_keystore_user = "nightgaragedebug"
           export/android/debug_keystore_pass = "android"
-          EOF2
+          EOF
 
       - name: Import project
         shell: bash
@@ -221,13 +293,13 @@ jobs:
           set -e
 
           if grep -Eiq \
-            'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call' \
+            'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
             /tmp/nightgarage-runtime.log; then
 
             echo "Runtime/script error detected:"
 
             grep -Ein \
-              'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call' \
+              'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
               /tmp/nightgarage-runtime.log
 
             exit 1
@@ -240,7 +312,7 @@ jobs:
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.2.1 APK
+      - name: Export Night Garage v0.2.2 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -254,16 +326,17 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.2.1.apk" \
+            "build/NightGarage-v0.2.2.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.2.1.apk
-          ls -lh game/build/NightGarage-v0.2.1.apk
+          test -f game/build/NightGarage-v0.2.2.apk
 
-      - name: Upload Night Garage v0.2.1 APK
+          ls -lh game/build/NightGarage-v0.2.2.apk
+
+      - name: Upload Night Garage v0.2.2 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.2.1-BlackScreenHotfix
-          path: game/build/NightGarage-v0.2.1.apk
+          name: NightGarage-v0.2.2-GameplayBase
+          path: game/build/NightGarage-v0.2.2.apk
           if-no-files-found: error
           retention-days: 14

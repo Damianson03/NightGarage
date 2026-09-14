@@ -42,6 +42,7 @@ var rpm_needle: ColorRect
 var rpm_zone_label: Label
 var gas_button: Button
 var shift_button: Button
+var race_hint: Label
 
 var result_title: Label
 var result_stats: Label
@@ -133,13 +134,13 @@ func _build_world() -> void:
         _add_lamp(6.2, -float(z))
 
     player_car = _create_golf_car(Color(0.78, 0.018, 0.028))
-    player_car.position = Vector3(-1.70, 0.0, 0.0)
+    player_car.position = Vector3(1.70, 0.0, 0.0)
     add_child(player_car)
     _prepare_golf_runtime(player_car, Color(0.78, 0.018, 0.028), true)
     _add_car_headlights(player_car, 3.4)
 
     opponent_car = _create_golf_car(Color(0.16, 0.18, 0.21))
-    opponent_car.position = Vector3(1.70, 0.0, 0.0)
+    opponent_car.position = Vector3(-1.70, 0.0, 0.0)
     add_child(opponent_car)
     _prepare_golf_runtime(opponent_car, Color(0.16, 0.18, 0.21), false)
     _add_car_headlights(opponent_car, 2.6)
@@ -293,7 +294,7 @@ func _build_ui() -> void:
 
     gas_button = Button.new()
     gas_button.text = "GAS"
-    gas_button.position = Vector2(1060, 525)
+    gas_button.position = Vector2(1060, 435)
     gas_button.size = Vector2(170, 145)
     gas_button.button_down.connect(_gas_down)
     gas_button.button_up.connect(_gas_up)
@@ -301,14 +302,14 @@ func _build_ui() -> void:
 
     shift_button = Button.new()
     shift_button.text = "SHIFT"
-    shift_button.position = Vector2(870, 525)
+    shift_button.position = Vector2(1060, 525)
     shift_button.size = Vector2(170, 145)
     shift_button.pressed.connect(_shift_pressed)
     race_panel.add_child(shift_button)
 
-    var hint := _label("Trzymaj GAS przed startem. Puść, aby RPM powoli opadało.", Vector2(34, 675), 15)
-    hint.modulate = Color(0.72, 0.75, 0.82)
-    race_panel.add_child(hint)
+    race_hint = _label("Trzymaj GAS przed startem. Puść, aby RPM powoli opadało.", Vector2(34, 675), 15)
+    race_hint.modulate = Color(0.72, 0.75, 0.82)
+    race_panel.add_child(race_hint)
 
     result_panel = Control.new()
     result_panel.size = Vector2(1280, 720)
@@ -350,10 +351,13 @@ func _apply_screen() -> void:
         _set_garage_camera()
 
     if state.screen == GameState.Screen.COUNTDOWN:
-        player_car.position = Vector3(-1.70, 0.0, 0.0)
-        opponent_car.position = Vector3(1.70, 0.0, 0.0)
+        player_car.position = Vector3(1.70, 0.0, 0.0)
+        opponent_car.position = Vector3(-1.70, 0.0, 0.0)
         last_player_wheel_distance = 0.0
         last_opponent_wheel_distance = 0.0
+
+    if state.screen == GameState.Screen.RACING:
+        state.set_gas(false)
 
     if state.screen == GameState.Screen.RESULT:
         _update_result_panel()
@@ -365,29 +369,40 @@ func _update_world() -> void:
     if state.screen == GameState.Screen.GARAGE:
         var orbit: float = float(Time.get_ticks_msec()) / 1000.0
         camera.position = Vector3(
-            -5.35 + sin(orbit * 0.16) * 0.75,
+            5.35 + sin(orbit * 0.16) * 0.75,
             2.15,
             -6.25 + cos(orbit * 0.16) * 0.85
         )
-        camera.look_at(Vector3(-1.70, 0.76, 0.0), Vector3.UP)
+        camera.look_at(Vector3(1.70, 0.76, 0.0), Vector3.UP)
         return
 
     player_car.position.z = -state.player_distance
     opponent_car.position.z = -state.opponent_distance
 
-    var blend := 0.0
+    var blend: float = 0.0
     if state.screen == GameState.Screen.RACING:
-        blend = _smoothstep(0.0, 1.35, state.race_time)
+        blend = _smoothstep(0.0, 1.55, state.race_time)
 
     var player_z: float = -float(state.player_distance)
+    var opponent_z: float = -float(state.opponent_distance)
 
-    var start_pos := Vector3(-5.0, 1.55, player_z - 5.9)
-    var side_pos := Vector3(7.6, 2.05, player_z + 3.0)
-    var cam_pos := start_pos.lerp(side_pos, blend)
+    # CSR-style opening shot: camera is in front of the player and on the
+    # player's right side, so we see the front and right flank of the Golf.
+    var start_pos := Vector3(6.35, 1.48, player_z - 6.35)
 
-    var start_target := Vector3(-1.70, 0.72, player_z - 0.3)
-    var side_target := Vector3(-0.2, 0.72, player_z - 15.0)
-    var target := start_target.lerp(side_target, blend)
+    # After launch the camera slides into a low side-follow position.
+    # It stays on the player's right side and looks slightly across both lanes.
+    var side_pos := Vector3(8.15, 1.88, player_z + 2.65)
+    var cam_pos: Vector3 = start_pos.lerp(side_pos, blend)
+
+    var start_target := Vector3(1.70, 0.74, player_z - 0.35)
+
+    # Bias the racing target about one third toward the rival. This keeps
+    # the player dominant in frame while naturally revealing the opponent.
+    var rival_bias_x: float = lerpf(1.70, -1.70, 0.34)
+    var rival_bias_z: float = lerpf(player_z, opponent_z, 0.18) - 13.5
+    var side_target := Vector3(rival_bias_x, 0.76, rival_bias_z)
+    var target: Vector3 = start_target.lerp(side_target, blend)
 
     camera.position = cam_pos
     camera.look_at(target, Vector3.UP)
@@ -412,7 +427,12 @@ func _update_ui() -> void:
         else:
             zero_to_100_label.text = "0-100: --"
 
-        if state.screen == GameState.Screen.COUNTDOWN:
+        var is_countdown: bool = state.screen == GameState.Screen.COUNTDOWN
+        gas_button.visible = is_countdown
+        shift_button.visible = not is_countdown
+        race_hint.visible = is_countdown
+
+        if is_countdown:
             countdown_label.visible = true
             countdown_label.text = str(maxi(1, int(ceil(minf(float(state.countdown), 3.0)))))
         else:
@@ -553,8 +573,8 @@ func _shift_pressed() -> void:
 
 
 func _set_garage_camera() -> void:
-    camera.position = Vector3(-5.35, 2.15, -6.25)
-    camera.look_at(Vector3(-1.70, 0.76, 0.0), Vector3.UP)
+    camera.position = Vector3(5.35, 2.15, -6.25)
+    camera.look_at(Vector3(1.70, 0.76, 0.0), Vector3.UP)
 
 
 func _create_golf_car(body_color: Color) -> Node3D:

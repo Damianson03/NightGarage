@@ -1,4 +1,4 @@
-name: Night Garage v0.3.0 - Golf 7 Model
+name: Night Garage v0.3.1 - CSR Camera Controls
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
-      - 'NightGarage-v0.3.0-Golf7Model-source.zip'
+      - 'NightGarage-v0.3.1-CSR-CameraControls-source.zip'
 
 permissions:
   contents: write
@@ -24,15 +24,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Night Garage v0.3.0 source
+      - name: Install Night Garage v0.3.1 source
         shell: bash
         run: |
-          test -f NightGarage-v0.3.0-Golf7Model-source.zip
+          test -f NightGarage-v0.3.1-CSR-CameraControls-source.zip
 
-          unzip -t NightGarage-v0.3.0-Golf7Model-source.zip
+          unzip -t NightGarage-v0.3.1-CSR-CameraControls-source.zip
 
           rm -rf game
-          unzip -q NightGarage-v0.3.0-Golf7Model-source.zip -d .
+
+          unzip -q \
+            NightGarage-v0.3.1-CSR-CameraControls-source.zip \
+            -d .
 
           test -f game/project.godot
           test -f game/main.tscn
@@ -41,23 +44,44 @@ jobs:
           test -f game/scripts/game_state.gd
           test -f game/android/nightgarage-debug.keystore
           test -f game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
-          test -f game/assets/cars/ATTRIBUTION.md
 
-          echo "Night Garage v0.3.0 source installed correctly."
-          ls -lh game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
+          echo "Night Garage v0.3.1 source installed correctly."
 
-      - name: Commit v0.3.0 source
+          grep -n \
+            "GAME_VERSION" \
+            game/scripts/game_state.gd
+
+          grep -n \
+            "player_car.position = Vector3" \
+            game/scripts/main.gd | head
+
+          grep -n \
+            "gas_button.position" \
+            game/scripts/main.gd
+
+          grep -n \
+            "rival_bias_x" \
+            game/scripts/main.gd
+
+      - name: Commit v0.3.1 source
         shell: bash
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config \
+            user.name \
+            "github-actions"
+
+          git config \
+            user.email \
+            "github-actions@github.com"
 
           git add game
 
           if git diff --cached --quiet; then
-            echo "v0.3.0 source already matches repository."
+            echo "v0.3.1 source already matches repository."
           else
-            git commit -m "Add Night Garage v0.3.0 Golf 7 model [skip ci]"
+            git commit \
+              -m "Add CSR camera and race controls v0.3.1 [skip ci]"
+
             git push
           fi
 
@@ -88,12 +112,25 @@ jobs:
             -O /tmp/godot.zip
 
           mkdir -p /tmp/godot
-          unzip -q /tmp/godot.zip -d /tmp/godot
 
-          GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+          unzip -q \
+            /tmp/godot.zip \
+            -d /tmp/godot
+
+          GODOT_BIN="$(
+            find \
+              /tmp/godot \
+              -maxdepth 1 \
+              -type f \
+              -name 'Godot_v*_linux.x86_64' \
+              | head -n 1
+          )"
 
           chmod +x "$GODOT_BIN"
-          sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
+
+          sudo ln -sf \
+            "$GODOT_BIN" \
+            /usr/local/bin/godot
 
           godot --version
 
@@ -107,11 +144,18 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
 
           mkdir -p "$TEMPLATE_DIR"
+
           rm -rf /tmp/templates_unpack
+
           mkdir -p /tmp/templates_unpack
 
-          unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
-          cp -a /tmp/templates_unpack/templates/. "$TEMPLATE_DIR/"
+          unzip -q \
+            /tmp/templates.tpz \
+            -d /tmp/templates_unpack
+
+          cp -a \
+            /tmp/templates_unpack/templates/. \
+            "$TEMPLATE_DIR/"
 
       - name: Configure Godot Android paths
         shell: bash
@@ -119,6 +163,7 @@ jobs:
           mkdir -p "$HOME/.config/godot"
 
           KEYSTORE_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
+
           test -f "$KEYSTORE_PATH"
 
           cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
@@ -155,12 +200,13 @@ jobs:
             2>&1 | tee /tmp/nightgarage-runtime.log
 
           GODOT_EXIT=${PIPESTATUS[0]}
+
           set -e
 
           if grep -Eiq \
             'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
-            /tmp/nightgarage-runtime.log; then
-
+            /tmp/nightgarage-runtime.log
+          then
             echo "Runtime/script error detected:"
 
             grep -Ein \
@@ -177,7 +223,7 @@ jobs:
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.3.0 APK
+      - name: Export Night Garage v0.3.1 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -191,18 +237,21 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.3.0.apk" \
+            "build/NightGarage-v0.3.1.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.3.0.apk
+          test -f \
+            game/build/NightGarage-v0.3.1.apk
 
-          echo "Night Garage v0.3.0 APK created:"
-          ls -lh game/build/NightGarage-v0.3.0.apk
+          echo "Night Garage v0.3.1 APK created:"
 
-      - name: Upload Night Garage v0.3.0 APK
+          ls -lh \
+            game/build/NightGarage-v0.3.1.apk
+
+      - name: Upload Night Garage v0.3.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.3.0-Golf7Model
-          path: game/build/NightGarage-v0.3.0.apk
+          name: NightGarage-v0.3.1-CSR-CameraControls
+          path: game/build/NightGarage-v0.3.1.apk
           if-no-files-found: error
           retention-days: 14

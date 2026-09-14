@@ -1,0 +1,25 @@
+; Night Garage v0.2.0
+config_version=5
+
+[application]
+
+config/name="Night Garage"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.6", "Mobile")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/handheld/orientation=0
+window/energy_saving/keep_screen_on=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.006, 0.009, 0.02, 1)

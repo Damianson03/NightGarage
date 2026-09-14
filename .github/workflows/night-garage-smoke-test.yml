@@ -1,4 +1,4 @@
-name: Night Garage v0.2.4 - RPM Zones
+name: Night Garage v0.3.0 - Golf 7 Model
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
-      - 'game/**'
+      - 'NightGarage-v0.3.0-Golf7Model-source.zip'
 
 permissions:
   contents: write
@@ -24,465 +24,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Add RPM green and red zones
+      - name: Install Night Garage v0.3.0 source
         shell: bash
         run: |
+          test -f NightGarage-v0.3.0-Golf7Model-source.zip
+
+          unzip -t NightGarage-v0.3.0-Golf7Model-source.zip
+
+          rm -rf game
+          unzip -q NightGarage-v0.3.0-Golf7Model-source.zip -d .
+
+          test -f game/project.godot
+          test -f game/main.tscn
+          test -f game/export_presets.cfg
           test -f game/scripts/main.gd
           test -f game/scripts/game_state.gd
-          test -f game/export_presets.cfg
           test -f game/android/nightgarage-debug.keystore
+          test -f game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
+          test -f game/assets/cars/ATTRIBUTION.md
 
-          python3 <<'PY'
-          from pathlib import Path
-          import re
+          echo "Night Garage v0.3.0 source installed correctly."
+          ls -lh game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
 
-          main_path = Path("game/scripts/main.gd")
-          main = main_path.read_text(encoding="utf-8")
-
-          # ---------------------------------------------------------
-          # Dodatkowe elementy HUD
-          # ---------------------------------------------------------
-
-          if "var rpm_green_zone: ColorRect" not in main:
-              main = main.replace(
-                  "var rpm_bar: ProgressBar\n",
-                  """var rpm_bar: ProgressBar
-          var rpm_green_zone: ColorRect
-          var rpm_red_zone: ColorRect
-          var rpm_needle: ColorRect
-          var rpm_zone_label: Label
-          """,
-                  1
-              )
-
-          # ---------------------------------------------------------
-          # Tworzenie stref RPM
-          # ---------------------------------------------------------
-
-          marker = """    race_panel.add_child(rpm_bar)
-          """
-
-          zone_code = """    race_panel.add_child(rpm_bar)
-
-              # Pasek bazowy zostawiamy lekko przezroczysty,
-              # żeby kolorowe strefy były bardzo dobrze widoczne.
-              rpm_bar.modulate = Color(
-                  0.62,
-                  0.72,
-                  1.0,
-                  0.42
-              )
-
-              # Zielona strefa:
-              # countdown = idealny start
-              # race = idealna zmiana biegu
-              rpm_green_zone = ColorRect.new()
-              rpm_green_zone.color = Color(
-                  0.08,
-                  0.95,
-                  0.22,
-                  0.72
-              )
-              rpm_green_zone.position = Vector2(
-                  310.0,
-                  625.0
-              )
-              rpm_green_zone.size = Vector2(
-                  10.0,
-                  32.0
-              )
-              rpm_green_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
-              race_panel.add_child(rpm_green_zone)
-
-              # Czerwona strefa oznacza za wysokie RPM.
-              rpm_red_zone = ColorRect.new()
-              rpm_red_zone.color = Color(
-                  1.0,
-                  0.08,
-                  0.06,
-                  0.68
-              )
-              rpm_red_zone.position = Vector2(
-                  850.0,
-                  625.0
-              )
-              rpm_red_zone.size = Vector2(
-                  70.0,
-                  32.0
-              )
-              rpm_red_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
-              race_panel.add_child(rpm_red_zone)
-
-              # Biała kreska pokazująca aktualne obroty.
-              rpm_needle = ColorRect.new()
-              rpm_needle.color = Color(
-                  1.0,
-                  1.0,
-                  1.0,
-                  1.0
-              )
-              rpm_needle.position = Vector2(
-                  310.0,
-                  620.0
-              )
-              rpm_needle.size = Vector2(
-                  5.0,
-                  42.0
-              )
-              rpm_needle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-              race_panel.add_child(rpm_needle)
-
-              rpm_zone_label = _label(
-                  "",
-                  Vector2(310.0, 592.0),
-                  16
-              )
-              rpm_zone_label.size = Vector2(
-                  610.0,
-                  28.0
-              )
-              rpm_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-              rpm_zone_label.modulate = Color(
-                  0.90,
-                  0.92,
-                  0.96
-              )
-              race_panel.add_child(rpm_zone_label)
-          """
-
-          if marker in main and "rpm_green_zone = ColorRect.new()" not in main:
-              main = main.replace(
-                  marker,
-                  zone_code,
-                  1
-              )
-
-          # ---------------------------------------------------------
-          # Aktualizacja stref podczas jazdy
-          # ---------------------------------------------------------
-
-          update_marker = """        rpm_bar.value = state.rpm
-          """
-
-          update_replacement = """        rpm_bar.value = state.rpm
-                  _update_rpm_zones()
-          """
-
-          if update_marker in main and "_update_rpm_zones()" not in main:
-              main = main.replace(
-                  update_marker,
-                  update_replacement,
-                  1
-              )
-
-          # Jeżeli sama funkcja jeszcze nie istnieje, dodajemy ją
-          # przed _update_garage_ui().
-          if "func _update_rpm_zones() -> void:" not in main:
-
-              function_marker = "\n\nfunc _update_garage_ui() -> void:\n"
-
-              rpm_function = """
-
-          func _update_rpm_zones() -> void:
-              if rpm_green_zone == null:
-                  return
-
-              if rpm_red_zone == null:
-                  return
-
-              if rpm_needle == null:
-                  return
-
-              if rpm_zone_label == null:
-                  return
-
-              var meter_x: float = 310.0
-              var meter_y: float = 625.0
-              var meter_width: float = 610.0
-              var meter_height: float = 32.0
-
-              var meter_max_rpm: float = float(
-                  rpm_bar.max_value
-              )
-
-              var zone_low: float = 0.0
-              var zone_high: float = 0.0
-
-              if state.screen == GameState.Screen.COUNTDOWN:
-                  zone_low = float(
-                      state.launch_green_low()
-                  )
-
-                  zone_high = float(
-                      state.launch_green_high()
-                  )
-
-                  rpm_zone_label.text = (
-                      "STREFA STARTU: %d-%d RPM"
-                      % [
-                          int(round(zone_low)),
-                          int(round(zone_high))
-                      ]
-                  )
-
-              else:
-                  zone_low = float(
-                      state.green_low()
-                  )
-
-                  zone_high = float(
-                      state.green_high()
-                  )
-
-                  rpm_zone_label.text = (
-                      "STREFA ZMIANY: %d-%d RPM"
-                      % [
-                          int(round(zone_low)),
-                          int(round(zone_high))
-                      ]
-                  )
-
-              zone_low = clampf(
-                  zone_low,
-                  0.0,
-                  meter_max_rpm
-              )
-
-              zone_high = clampf(
-                  zone_high,
-                  zone_low,
-                  meter_max_rpm
-              )
-
-              var green_start_ratio: float = (
-                  zone_low / meter_max_rpm
-              )
-
-              var green_end_ratio: float = (
-                  zone_high / meter_max_rpm
-              )
-
-              var green_x: float = (
-                  meter_x
-                  + meter_width
-                  * green_start_ratio
-              )
-
-              var green_width: float = maxf(
-                  4.0,
-                  meter_width
-                  * (
-                      green_end_ratio
-                      - green_start_ratio
-                  )
-              )
-
-              rpm_green_zone.position = Vector2(
-                  green_x,
-                  meter_y
-              )
-
-              rpm_green_zone.size = Vector2(
-                  green_width,
-                  meter_height
-              )
-
-              # Czerwone pole zaczyna się bezpośrednio
-              # po zielonym zakresie.
-              var red_x: float = (
-                  meter_x
-                  + meter_width
-                  * green_end_ratio
-              )
-
-              var red_width: float = maxf(
-                  4.0,
-                  (
-                      meter_x
-                      + meter_width
-                  )
-                  - red_x
-              )
-
-              rpm_red_zone.position = Vector2(
-                  red_x,
-                  meter_y
-              )
-
-              rpm_red_zone.size = Vector2(
-                  red_width,
-                  meter_height
-              )
-
-              # Aktualna pozycja obrotów.
-              var rpm_ratio: float = clampf(
-                  float(state.rpm)
-                  / meter_max_rpm,
-                  0.0,
-                  1.0
-              )
-
-              var needle_x: float = (
-                  meter_x
-                  + meter_width
-                  * rpm_ratio
-              )
-
-              rpm_needle.position = Vector2(
-                  needle_x - 2.5,
-                  meter_y - 5.0
-              )
-
-              # Kolor liczby RPM.
-              if state.rpm >= zone_low and state.rpm <= zone_high:
-
-                  rpm_label.modulate = Color(
-                      0.20,
-                      1.0,
-                      0.28
-                  )
-
-              elif state.rpm > zone_high:
-
-                  rpm_label.modulate = Color(
-                      1.0,
-                      0.18,
-                      0.12
-                  )
-
-              else:
-
-                  rpm_label.modulate = Color(
-                      1.0,
-                      1.0,
-                      1.0
-                  )
-          """
-
-              if function_marker not in main:
-                  raise SystemExit(
-                      "Nie znaleziono _update_garage_ui() w main.gd"
-                  )
-
-              main = main.replace(
-                  function_marker,
-                  rpm_function + function_marker,
-                  1
-              )
-
-          main_path.write_text(
-              main,
-              encoding="utf-8"
-          )
-
-          # ---------------------------------------------------------
-          # Numer wersji gry
-          # ---------------------------------------------------------
-
-          state_path = Path(
-              "game/scripts/game_state.gd"
-          )
-
-          state = state_path.read_text(
-              encoding="utf-8"
-          )
-
-          state = re.sub(
-              r'const GAME_VERSION := "v[^"]+"',
-              'const GAME_VERSION := "v0.2.4"',
-              state,
-              count=1
-          )
-
-          state_path.write_text(
-              state,
-              encoding="utf-8"
-          )
-
-          # ---------------------------------------------------------
-          # Numer APK
-          # ---------------------------------------------------------
-
-          preset_path = Path(
-              "game/export_presets.cfg"
-          )
-
-          preset = preset_path.read_text(
-              encoding="utf-8"
-          )
-
-          preset = re.sub(
-              r'export_path="build/NightGarage-v[^"]+\\.apk"',
-              'export_path="build/NightGarage-v0.2.4.apk"',
-              preset,
-              count=1
-          )
-
-          preset = re.sub(
-              r'version/code=\\d+',
-              'version/code=4',
-              preset,
-              count=1
-          )
-
-          preset = re.sub(
-              r'version/name="[^"]+"',
-              'version/name="0.2.4"',
-              preset,
-              count=1
-          )
-
-          preset_path.write_text(
-              preset,
-              encoding="utf-8"
-          )
-          PY
-
-          echo "===== NIGHT GARAGE V0.2.4 ====="
-
-          grep -n \
-            "GAME_VERSION" \
-            game/scripts/game_state.gd
-
-          grep -n \
-            "rpm_green_zone" \
-            game/scripts/main.gd | head
-
-          grep -n \
-            "_update_rpm_zones" \
-            game/scripts/main.gd
-
-          grep -n \
-            "version/name" \
-            game/export_presets.cfg
-
-      - name: Commit v0.2.4 source
+      - name: Commit v0.3.0 source
         shell: bash
         run: |
-          git config \
-            user.name \
-            "github-actions"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
-          git config \
-            user.email \
-            "github-actions@github.com"
-
-          git add \
-            game/scripts/main.gd \
-            game/scripts/game_state.gd \
-            game/export_presets.cfg
+          git add game
 
           if git diff --cached --quiet; then
-
-            echo "v0.2.4 source already present."
-
+            echo "v0.3.0 source already matches repository."
           else
-
-            git commit \
-              -m "Add RPM green and red zones v0.2.4 [skip ci]"
-
+            git commit -m "Add Night Garage v0.3.0 Golf 7 model [skip ci]"
             git push
-
           fi
 
       - name: Set up Java 17
@@ -512,25 +88,12 @@ jobs:
             -O /tmp/godot.zip
 
           mkdir -p /tmp/godot
+          unzip -q /tmp/godot.zip -d /tmp/godot
 
-          unzip -q \
-            /tmp/godot.zip \
-            -d /tmp/godot
-
-          GODOT_BIN="$(
-            find \
-              /tmp/godot \
-              -maxdepth 1 \
-              -type f \
-              -name 'Godot_v*_linux.x86_64' \
-              | head -n 1
-          )"
+          GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
 
           chmod +x "$GODOT_BIN"
-
-          sudo ln -sf \
-            "$GODOT_BIN" \
-            /usr/local/bin/godot
+          sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
 
           godot --version
 
@@ -544,18 +107,11 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
 
           mkdir -p "$TEMPLATE_DIR"
-
           rm -rf /tmp/templates_unpack
-
           mkdir -p /tmp/templates_unpack
 
-          unzip -q \
-            /tmp/templates.tpz \
-            -d /tmp/templates_unpack
-
-          cp -a \
-            /tmp/templates_unpack/templates/. \
-            "$TEMPLATE_DIR/"
+          unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
+          cp -a /tmp/templates_unpack/templates/. "$TEMPLATE_DIR/"
 
       - name: Configure Godot Android paths
         shell: bash
@@ -563,7 +119,6 @@ jobs:
           mkdir -p "$HOME/.config/godot"
 
           KEYSTORE_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
-
           test -f "$KEYSTORE_PATH"
 
           cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
@@ -577,7 +132,7 @@ jobs:
           export/android/debug_keystore_pass = "android"
           EOF
 
-      - name: Import project
+      - name: Import project and Golf 7 model
         shell: bash
         run: |
           godot \
@@ -597,17 +152,14 @@ jobs:
             --path game \
             --quit-after 8 \
             --verbose \
-            2>&1 \
-            | tee /tmp/nightgarage-runtime.log
+            2>&1 | tee /tmp/nightgarage-runtime.log
 
           GODOT_EXIT=${PIPESTATUS[0]}
-
           set -e
 
           if grep -Eiq \
             'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
-            /tmp/nightgarage-runtime.log
-          then
+            /tmp/nightgarage-runtime.log; then
 
             echo "Runtime/script error detected:"
 
@@ -616,28 +168,22 @@ jobs:
               /tmp/nightgarage-runtime.log
 
             exit 1
-
           fi
 
           if [ "$GODOT_EXIT" -ne 0 ]; then
-
             echo "Godot runtime smoke test exited with code $GODOT_EXIT"
-
             exit "$GODOT_EXIT"
-
           fi
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.2.4 APK
+      - name: Export Night Garage v0.3.0 APK
         shell: bash
         run: |
           mkdir -p game/build
 
           export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
-
           export GODOT_ANDROID_KEYSTORE_DEBUG_USER="nightgaragedebug"
-
           export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD="android"
 
           godot \
@@ -645,19 +191,18 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.2.4.apk" \
+            "build/NightGarage-v0.3.0.apk" \
             --verbose
 
-          test -f \
-            game/build/NightGarage-v0.2.4.apk
+          test -f game/build/NightGarage-v0.3.0.apk
 
-          ls -lh \
-            game/build/NightGarage-v0.2.4.apk
+          echo "Night Garage v0.3.0 APK created:"
+          ls -lh game/build/NightGarage-v0.3.0.apk
 
-      - name: Upload Night Garage v0.2.4 APK
+      - name: Upload Night Garage v0.3.0 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.2.4-RPMZones
-          path: game/build/NightGarage-v0.2.4.apk
+          name: NightGarage-v0.3.0-Golf7Model
+          path: game/build/NightGarage-v0.3.0.apk
           if-no-files-found: error
           retention-days: 14

@@ -1,4 +1,4 @@
-name: Night Garage v0.2.2 - GDScript Type Hotfix
+name: Night Garage v0.2.3 - Variant Type Hotfix
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply v0.2.2 GDScript type hotfix
+      - name: Apply v0.2.3 strict typing hotfix
         shell: bash
         run: |
           test -f game/scripts/main.gd
@@ -39,33 +39,16 @@ jobs:
           main_path = Path("game/scripts/main.gd")
           main = main_path.read_text(encoding="utf-8")
 
-          old_ready = '''func _ready() -> void:
-              _build_world()
-              _build_ui()
-              _apply_screen()
-          '''
+          main = main.replace(
+              "func _ready() -> void:\n    _build_world()\n    _build_ui()\n    _apply_screen()\n",
+              "func _ready() -> void:\n    _build_ui()\n    _build_world()\n    _apply_screen()\n    _update_ui()\n",
+          )
 
-          new_ready = '''func _ready() -> void:
-              _build_ui()
-              _build_world()
-              _apply_screen()
-              _update_ui()
-          '''
-
-          if old_ready in main:
-              main = main.replace(old_ready, new_ready, 1)
-
-          old_camera = '''    camera = Camera3D.new()
-              add_child(camera)
-          '''
-
-          new_camera = '''    camera = Camera3D.new()
-              add_child(camera)
-              camera.current = true
-          '''
-
-          if old_camera in main:
-              main = main.replace(old_camera, new_camera, 1)
+          main = main.replace(
+              "    camera = Camera3D.new()\n    add_child(camera)\n",
+              "    camera = Camera3D.new()\n    add_child(camera)\n    camera.current = true\n",
+              1,
+          )
 
           main = main.replace(
               "    moon.shadow_enabled = true\n",
@@ -73,126 +56,221 @@ jobs:
               1,
           )
 
-          lamp_start = main.find("func _add_lamp(x: float, z: float) -> void:")
-          lamp_end = main.find("\n\nfunc _add_box(", lamp_start)
+          main = main.replace(
+              "    var player_z := -state.player_distance\n",
+              "    var player_z: float = -float(state.player_distance)\n",
+          )
 
-          if lamp_start != -1 and lamp_end != -1:
-              safe_lamp = '''func _add_lamp(x: float, z: float) -> void:
-              _add_box(
-                  Vector3(x, 2.6, z),
-                  Vector3(0.10, 5.2, 0.10),
-                  Color(0.12, 0.13, 0.17),
-                  0.65,
-                  0.65
-              )
-          '''
-              main = main[:lamp_start] + safe_lamp + main[lamp_end:]
+          main = main.replace(
+              "        var cost := state.upgrade_cost(i)\n",
+              "        var cost: int = int(state.upgrade_cost(i))\n",
+          )
 
-          replacements = {
-              "    var player_z := -state.player_distance\n":
-                  "    var player_z: float = -float(state.player_distance)\n",
+          main = main.replace(
+              "    var t := clamp((value - edge0) / max(0.0001, edge1 - edge0), 0.0, 1.0)\n",
+              "    var t: float = clampf((value - edge0) / maxf(0.0001, edge1 - edge0), 0.0, 1.0)\n",
+          )
 
-              "        var cost := state.upgrade_cost(i)\n":
-                  "        var cost: int = int(state.upgrade_cost(i))\n",
-
-              "    var t := clamp((value - edge0) / max(0.0001, edge1 - edge0), 0.0, 1.0)\n":
-                  "    var t: float = clampf((value - edge0) / maxf(0.0001, edge1 - edge0), 0.0, 1.0)\n",
-          }
-
-          for old, new in replacements.items():
-              main = main.replace(old, new)
+          main = main.replace(
+              "str(max(1, int(ceil(min(state.countdown, 3.0)))))",
+              "str(maxi(1, int(ceil(minf(float(state.countdown), 3.0)))))",
+          )
 
           main_path.write_text(main, encoding="utf-8")
 
           state_path = Path("game/scripts/game_state.gd")
           state = state_path.read_text(encoding="utf-8")
 
+          for old in ["v0.2.0", "v0.2.1", "v0.2.2"]:
+              state = state.replace(
+                  f'const GAME_VERSION := "{old}"',
+                  'const GAME_VERSION := "v0.2.3"',
+              )
+
           state = state.replace(
-              'const GAME_VERSION := "v0.2.0"',
-              'const GAME_VERSION := "v0.2.2"',
+              "const GEAR_RATIOS := [3.77, 1.96, 1.28, 0.88, 0.67]",
+              "const GEAR_RATIOS: Array[float] = [3.77, 1.96, 1.28, 0.88, 0.67]",
           )
 
           state = state.replace(
-              'const GAME_VERSION := "v0.2.1"',
-              'const GAME_VERSION := "v0.2.2"',
+              "const UPGRADE_BASE_COST := [22000, 28000, 18000, 16000, 14000, 17000]",
+              "const UPGRADE_BASE_COST: Array[int] = [22000, 28000, 18000, 16000, 14000, 17000]",
           )
 
           state = state.replace(
-              'const GEAR_RATIOS := [3.77, 1.96, 1.28, 0.88, 0.67]',
-              'const GEAR_RATIOS: Array[float] = [3.77, 1.96, 1.28, 0.88, 0.67]',
+              "var upgrades := [0, 0, 0, 0, 0, 0]",
+              "var upgrades: Array[int] = [0, 0, 0, 0, 0, 0]",
           )
 
           state = state.replace(
-              'const UPGRADE_BASE_COST := [22000, 28000, 18000, 16000, 14000, 17000]',
-              'const UPGRADE_BASE_COST: Array[int] = [22000, 28000, 18000, 16000, 14000, 17000]',
+              "    var diff := abs(rpm - center)\n",
+              "    var diff: float = absf(rpm - center)\n",
           )
 
           state = state.replace(
-              'var upgrades := [0, 0, 0, 0, 0, 0]',
-              'var upgrades: Array[int] = [0, 0, 0, 0, 0, 0]',
+              "    return max(0.35, 0.60 - float(upgrades[2]) * 0.05)",
+              "    return maxf(0.35, 0.60 - float(upgrades[2]) * 0.05)",
           )
 
           state = state.replace(
-              '    var dt := min(delta, 0.05)',
-              '    var dt: float = minf(delta, 0.05)',
+              "float(max(0, career_stage - 1))",
+              "float(maxi(0, career_stage - 1))",
           )
 
           state = state.replace(
-              '        var target_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))',
-              '        var target_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))',
+              "    var dt := min(delta, 0.05)",
+              "    var dt: float = minf(delta, 0.05)",
           )
 
           state = state.replace(
-              '        var launch_fade := max(0.0, 1.0 - race_time / 2.2)',
-              '        var launch_fade: float = maxf(0.0, 1.0 - race_time / 2.2)',
+              "    rpm = clamp(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)",
+              "    rpm = clampf(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)",
           )
 
           state = state.replace(
-              '    var coupled_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))',
-              '    var coupled_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))',
+              "    launch_quality = clamp(1.0 - diff / (half_width * 2.0), 0.0, 1.0)",
+              "    launch_quality = clampf(1.0 - diff / (half_width * 2.0), 0.0, 1.0)",
           )
 
           state = state.replace(
-              '        var coupling := clamp(race_time / 0.90, 0.0, 1.0)',
-              '        var coupling: float = clampf(race_time / 0.90, 0.0, 1.0)',
+              "            progress = clamp(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)",
+              "            progress = clampf(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)",
           )
 
           state = state.replace(
-              '    var r := max(700.0, engine_rpm)',
-              '    var r: float = maxf(700.0, engine_rpm)',
+              "        var target_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))",
+              "        var target_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))",
           )
 
           state = state.replace(
-              '    var aero_fade := max(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)',
-              '    var aero_fade: float = maxf(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)',
+              "            rpm = max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
+              "            rpm = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
           )
 
           state = state.replace(
-              '    var level := upgrades[index]',
-              '    var level: int = int(upgrades[index])',
+              "            drive_force = min(drive_force, traction_limit)",
+              "            drive_force = minf(drive_force, traction_limit)",
+          )
+
+          state = state.replace(
+              "        var launch_fade := max(0.0, 1.0 - race_time / 2.2)",
+              "        var launch_fade: float = maxf(0.0, 1.0 - race_time / 2.2)",
+          )
+
+          state = state.replace(
+              "        drive_force *= max(0.70, 1.0 - launch_penalty * launch_fade)",
+              "        drive_force *= maxf(0.70, 1.0 - launch_penalty * launch_fade)",
+          )
+
+          state = state.replace(
+              "    speed_ms = max(0.0, speed_ms)",
+              "    speed_ms = maxf(0.0, speed_ms)",
+          )
+
+          state = state.replace(
+              "    max_speed_seen = max(max_speed_seen, speed_kmh)",
+              "    max_speed_seen = maxf(max_speed_seen, speed_kmh)",
+          )
+
+          state = state.replace(
+              "    var coupled_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
+              "    var coupled_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
+          )
+
+          state = state.replace(
+              "        var coupling := clamp(race_time / 0.90, 0.0, 1.0)",
+              "        var coupling: float = clampf(race_time / 0.90, 0.0, 1.0)",
+          )
+
+          state = state.replace(
+              "        return max(coupled_rpm, slipping_rpm)",
+              "        return maxf(coupled_rpm, slipping_rpm)",
+          )
+
+          state = state.replace(
+              "    var r := max(700.0, engine_rpm)",
+              "    var r: float = maxf(700.0, engine_rpm)",
+          )
+
+          state = state.replace(
+              "    var aero_fade := max(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)",
+              "    var aero_fade: float = maxf(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)",
+          )
+
+          state = state.replace(
+              "    opponent_speed_kmh = min(opponent_speed_kmh, opponent_max_speed)",
+              "    opponent_speed_kmh = minf(opponent_speed_kmh, opponent_max_speed)",
+          )
+
+          state = state.replace(
+              "    var level := upgrades[index]",
+              "    var level: int = int(upgrades[index])",
           )
 
           state_path.write_text(state, encoding="utf-8")
+
+          preset_path = Path("game/export_presets.cfg")
+          preset = preset_path.read_text(encoding="utf-8")
+
+          preset = preset.replace(
+              'export_path="build/NightGarage-v0.2.0.apk"',
+              'export_path="build/NightGarage-v0.2.3.apk"'
+          )
+
+          preset = preset.replace(
+              'export_path="build/NightGarage-v0.2.1.apk"',
+              'export_path="build/NightGarage-v0.2.3.apk"'
+          )
+
+          preset = preset.replace(
+              'export_path="build/NightGarage-v0.2.2.apk"',
+              'export_path="build/NightGarage-v0.2.3.apk"'
+          )
+
+          preset = preset.replace(
+              'version/code=2',
+              'version/code=3'
+          )
+
+          preset = preset.replace(
+              'version/name="0.2.0"',
+              'version/name="0.2.3"'
+          )
+
+          preset = preset.replace(
+              'version/name="0.2.1"',
+              'version/name="0.2.3"'
+          )
+
+          preset = preset.replace(
+              'version/name="0.2.2"',
+              'version/name="0.2.3"'
+          )
+
+          preset_path.write_text(preset, encoding="utf-8")
           PY
 
-          echo "===== TYPE HOTFIX CHECK ====="
-          grep -n "player_z" game/scripts/main.gd
-          grep -n "var cost" game/scripts/main.gd
-          grep -n "var t:" game/scripts/main.gd
+          echo "===== V0.2.3 CHECK ====="
           grep -n "GAME_VERSION" game/scripts/game_state.gd
+          grep -n "var diff" game/scripts/game_state.gd
+          grep -n "player_z" game/scripts/main.gd
+          grep -n "version/name" game/export_presets.cfg
 
-      - name: Commit v0.2.2 source
+      - name: Commit v0.2.3 source
         shell: bash
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add game/scripts/main.gd game/scripts/game_state.gd
+          git add \
+            game/scripts/main.gd \
+            game/scripts/game_state.gd \
+            game/export_presets.cfg
 
           if git diff --cached --quiet; then
-            echo "v0.2.2 source already present."
+            echo "v0.2.3 source already present."
           else
-            git commit -m "Fix GDScript type errors in v0.2.2 [skip ci]"
+            git commit -m "Fix strict GDScript typing in v0.2.3 [skip ci]"
             git push
           fi
 
@@ -293,13 +371,13 @@ jobs:
           set -e
 
           if grep -Eiq \
-            'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
+            'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
             /tmp/nightgarage-runtime.log; then
 
             echo "Runtime/script error detected:"
 
             grep -Ein \
-              'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
+              'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
               /tmp/nightgarage-runtime.log
 
             exit 1
@@ -312,7 +390,7 @@ jobs:
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.2.2 APK
+      - name: Export Night Garage v0.2.3 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -326,17 +404,17 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.2.2.apk" \
+            "build/NightGarage-v0.2.3.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.2.2.apk
+          test -f game/build/NightGarage-v0.2.3.apk
 
-          ls -lh game/build/NightGarage-v0.2.2.apk
+          ls -lh game/build/NightGarage-v0.2.3.apk
 
-      - name: Upload Night Garage v0.2.2 APK
+      - name: Upload Night Garage v0.2.3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.2.2-GameplayBase
-          path: game/build/NightGarage-v0.2.2.apk
+          name: NightGarage-v0.2.3-GameplayBase
+          path: game/build/NightGarage-v0.2.3.apk
           if-no-files-found: error
           retention-days: 14

@@ -36,9 +36,12 @@ var last_screen := -1
 
 
 func _ready() -> void:
-    _build_world()
+    # Build UI first. Even if the 3D scene has a device-specific problem,
+    # the app will no longer stay on a completely black screen.
     _build_ui()
+    _build_world()
     _apply_screen()
+    _update_ui()
 
 
 func _process(delta: float) -> void:
@@ -54,6 +57,7 @@ func _process(delta: float) -> void:
 func _build_world() -> void:
     camera = Camera3D.new()
     add_child(camera)
+    camera.current = true
 
     var world := WorldEnvironment.new()
     var env := Environment.new()
@@ -69,7 +73,7 @@ func _build_world() -> void:
     moon.rotation_degrees = Vector3(-48.0, -30.0, 0.0)
     moon.light_color = Color(0.58, 0.68, 1.0)
     moon.light_energy = 1.7
-    moon.shadow_enabled = true
+    moon.shadow_enabled = false
     add_child(moon)
 
     var warm_light := OmniLight3D.new()
@@ -477,14 +481,13 @@ func _create_golf_placeholder(body_color: Color) -> Node3D:
 
 
 func _add_lamp(x: float, z: float) -> void:
-    _add_box(Vector3(x, 2.6, z), Vector3(0.10, 5.2, 0.10), Color(0.12, 0.13, 0.17), 0.65, 0.65)
-
-    var light := OmniLight3D.new()
-    light.position = Vector3(x, 5.0, z)
-    light.light_color = Color(1.0, 0.75, 0.48)
-    light.light_energy = 3.2
-    light.omni_range = 10.0
-    add_child(light)
+    _add_box(
+        Vector3(x, 2.6, z),
+        Vector3(0.10, 5.2, 0.10),
+        Color(0.12, 0.13, 0.17),
+        0.65,
+        0.65
+    )
 
 
 func _add_box(position_value: Vector3, size_value: Vector3, color: Color, metallic: float, roughness: float) -> MeshInstance3D:

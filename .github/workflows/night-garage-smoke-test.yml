@@ -1,4 +1,4 @@
-name: Night Garage v0.2.0 - Gameplay Base
+name: Night Garage v0.2.1 - Black Screen Hotfix
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
-      - 'NightGarage-v0.2.0-GameplayBase-source.zip'
+      - 'game/**'
 
 permissions:
   contents: write
@@ -24,37 +24,103 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Gameplay Base source
+      - name: Apply v0.2.1 black screen hotfix
         shell: bash
         run: |
-          test -f NightGarage-v0.2.0-GameplayBase-source.zip
-
-          unzip -t NightGarage-v0.2.0-GameplayBase-source.zip
-
-          rm -rf game
-          unzip -q NightGarage-v0.2.0-GameplayBase-source.zip -d .
-
+          test -f game/scripts/main.gd
+          test -f game/scripts/game_state.gd
           test -f game/project.godot
           test -f game/export_presets.cfg
-          test -f game/main.tscn
-          test -f game/scripts/game_state.gd
-          test -f game/scripts/main.gd
           test -f game/android/nightgarage-debug.keystore
 
-          echo "Gameplay Base source extracted correctly."
+          python3 <<'PY'
+          from pathlib import Path
 
-      - name: Commit Gameplay Base source
+          main_path = Path("game/scripts/main.gd")
+          text = main_path.read_text(encoding="utf-8")
+
+          old_ready = '''func _ready() -> void:
+              _build_world()
+              _build_ui()
+              _apply_screen()
+          '''
+
+          new_ready = '''func _ready() -> void:
+              # Build UI first. Even if the 3D scene has a device-specific problem,
+              # the app will no longer stay on a completely black screen.
+              _build_ui()
+              _build_world()
+              _apply_screen()
+              _update_ui()
+          '''
+
+          if old_ready in text:
+              text = text.replace(old_ready, new_ready, 1)
+
+          old_camera = '''    camera = Camera3D.new()
+              add_child(camera)
+          '''
+
+          new_camera = '''    camera = Camera3D.new()
+              add_child(camera)
+              camera.current = true
+          '''
+
+          if old_camera in text:
+              text = text.replace(old_camera, new_camera, 1)
+
+          text = text.replace(
+              "    moon.shadow_enabled = true\n",
+              "    moon.shadow_enabled = false\n",
+              1,
+          )
+
+          start = text.find("func _add_lamp(x: float, z: float) -> void:")
+          end = text.find("\n\nfunc _add_box(", start)
+
+          if start == -1 or end == -1:
+              raise SystemExit("Could not find _add_lamp() in main.gd")
+
+          safe_lamp = '''func _add_lamp(x: float, z: float) -> void:
+              _add_box(
+                  Vector3(x, 2.6, z),
+                  Vector3(0.10, 5.2, 0.10),
+                  Color(0.12, 0.13, 0.17),
+                  0.65,
+                  0.65
+              )
+          '''
+
+          text = text[:start] + safe_lamp + text[end:]
+          main_path.write_text(text, encoding="utf-8")
+
+          state_path = Path("game/scripts/game_state.gd")
+          state = state_path.read_text(encoding="utf-8")
+          state = state.replace(
+              'const GAME_VERSION := "v0.2.0"',
+              'const GAME_VERSION := "v0.2.1"',
+          )
+          state_path.write_text(state, encoding="utf-8")
+          PY
+
+          echo "===== HOTFIX CHECK ====="
+          grep -n "func _ready" -A8 game/scripts/main.gd
+          grep -n "camera.current" game/scripts/main.gd
+          grep -n "func _add_lamp" -A10 game/scripts/main.gd
+          grep -n "GAME_VERSION" game/scripts/game_state.gd
+
+      - name: Commit hotfix source
         shell: bash
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add game
+          git add game/scripts/main.gd game/scripts/game_state.gd
 
           if git diff --cached --quiet; then
-            echo "Gameplay Base source already matches repository."
+            echo "v0.2.1 source already present."
           else
-            git commit -m "Add Night Garage v0.2.0 Gameplay Base [skip ci]"
+            git commit -m "Fix Android black screen in v0.2.1 [skip ci]"
             git push
           fi
 
@@ -118,7 +184,7 @@ jobs:
           KEYSTORE_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
           test -f "$KEYSTORE_PATH"
 
-          cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
+          cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF2
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
@@ -127,9 +193,9 @@ jobs:
           export/android/debug_keystore = "$KEYSTORE_PATH"
           export/android/debug_keystore_user = "nightgaragedebug"
           export/android/debug_keystore_pass = "android"
-          EOF
+          EOF2
 
-      - name: Import and validate project
+      - name: Import project
         shell: bash
         run: |
           godot \
@@ -139,7 +205,42 @@ jobs:
             --quit \
             --verbose
 
-      - name: Export Night Garage Gameplay Base APK
+      - name: Runtime smoke test
+        shell: bash
+        run: |
+          set +e
+
+          godot \
+            --headless \
+            --path game \
+            --quit-after 8 \
+            --verbose \
+            2>&1 | tee /tmp/nightgarage-runtime.log
+
+          GODOT_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if grep -Eiq \
+            'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call' \
+            /tmp/nightgarage-runtime.log; then
+
+            echo "Runtime/script error detected:"
+
+            grep -Ein \
+              'SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call' \
+              /tmp/nightgarage-runtime.log
+
+            exit 1
+          fi
+
+          if [ "$GODOT_EXIT" -ne 0 ]; then
+            echo "Godot runtime smoke test exited with code $GODOT_EXIT"
+            exit "$GODOT_EXIT"
+          fi
+
+          echo "Runtime smoke test passed."
+
+      - name: Export Night Garage v0.2.1 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -153,18 +254,16 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.2.0.apk" \
+            "build/NightGarage-v0.2.1.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.2.0.apk
+          test -f game/build/NightGarage-v0.2.1.apk
+          ls -lh game/build/NightGarage-v0.2.1.apk
 
-          echo "Night Garage v0.2.0 APK created:"
-          ls -lh game/build/NightGarage-v0.2.0.apk
-
-      - name: Upload Night Garage Gameplay Base APK
+      - name: Upload Night Garage v0.2.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.2.0-GameplayBase
-          path: game/build/NightGarage-v0.2.0.apk
+          name: NightGarage-v0.2.1-BlackScreenHotfix
+          path: game/build/NightGarage-v0.2.1.apk
           if-no-files-found: error
           retention-days: 14

@@ -1,12 +1,22 @@
 extends Node3D
 
 const GameState = preload("res://scripts/game_state.gd")
+const GOLF_MODEL_PATH := "res://assets/cars/2014_volkswagen_golf_gti_mk7.glb"
+const GOLF_MODEL_SCALE := 100.0
+
 
 var state = GameState.new()
 
 var player_car: Node3D
 var opponent_car: Node3D
 var camera: Camera3D
+
+var player_wheels: Array[Node3D] = []
+var player_wheel_signs: Array[float] = []
+var opponent_wheels: Array[Node3D] = []
+var opponent_wheel_signs: Array[float] = []
+var last_player_wheel_distance: float = 0.0
+var last_opponent_wheel_distance: float = 0.0
 
 var garage_panel: Control
 var race_panel: Control
@@ -40,8 +50,6 @@ var last_screen := -1
 
 
 func _ready() -> void:
-    # Build UI first. Even if the 3D scene has a device-specific problem,
-    # the app will no longer stay on a completely black screen.
     _build_ui()
     _build_world()
     _apply_screen()
@@ -61,8 +69,6 @@ func _process(delta: float) -> void:
 func _build_world() -> void:
     camera = Camera3D.new()
     add_child(camera)
-    camera.current = true
-    camera.current = true
     camera.current = true
 
     var world := WorldEnvironment.new()
@@ -126,13 +132,17 @@ func _build_world() -> void:
         _add_lamp(-6.2, -float(z))
         _add_lamp(6.2, -float(z))
 
-    player_car = _create_golf_placeholder(Color(0.78, 0.035, 0.045))
+    player_car = _create_golf_car(Color(0.78, 0.018, 0.028))
     player_car.position = Vector3(-1.70, 0.0, 0.0)
     add_child(player_car)
+    _prepare_golf_runtime(player_car, Color(0.78, 0.018, 0.028), true)
+    _add_car_headlights(player_car, 3.4)
 
-    opponent_car = _create_golf_placeholder(Color(0.14, 0.16, 0.20))
+    opponent_car = _create_golf_car(Color(0.16, 0.18, 0.21))
     opponent_car.position = Vector3(1.70, 0.0, 0.0)
     add_child(opponent_car)
+    _prepare_golf_runtime(opponent_car, Color(0.16, 0.18, 0.21), false)
+    _add_car_headlights(opponent_car, 2.6)
 
     _set_garage_camera()
 
@@ -154,7 +164,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  GAMEPLAY BASE", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  GOLF 7 MODEL", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -252,89 +262,33 @@ func _build_ui() -> void:
     rpm_bar.show_percentage = false
     race_panel.add_child(rpm_bar)
 
-    # Pasek bazowy zostawiamy lekko przezroczysty,
-    # żeby kolorowe strefy były bardzo dobrze widoczne.
-    rpm_bar.modulate = Color(
-        0.62,
-        0.72,
-        1.0,
-        0.42
-    )
+    rpm_bar.modulate = Color(0.62, 0.72, 1.0, 0.42)
 
-    # Zielona strefa:
-    # countdown = idealny start
-    # race = idealna zmiana biegu
     rpm_green_zone = ColorRect.new()
-    rpm_green_zone.color = Color(
-        0.08,
-        0.95,
-        0.22,
-        0.72
-    )
-    rpm_green_zone.position = Vector2(
-        310.0,
-        625.0
-    )
-    rpm_green_zone.size = Vector2(
-        10.0,
-        32.0
-    )
+    rpm_green_zone.color = Color(0.08, 0.95, 0.22, 0.72)
+    rpm_green_zone.position = Vector2(310.0, 625.0)
+    rpm_green_zone.size = Vector2(10.0, 32.0)
     rpm_green_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
     race_panel.add_child(rpm_green_zone)
 
-    # Czerwona strefa oznacza za wysokie RPM.
     rpm_red_zone = ColorRect.new()
-    rpm_red_zone.color = Color(
-        1.0,
-        0.08,
-        0.06,
-        0.68
-    )
-    rpm_red_zone.position = Vector2(
-        850.0,
-        625.0
-    )
-    rpm_red_zone.size = Vector2(
-        70.0,
-        32.0
-    )
+    rpm_red_zone.color = Color(1.0, 0.08, 0.06, 0.68)
+    rpm_red_zone.position = Vector2(850.0, 625.0)
+    rpm_red_zone.size = Vector2(70.0, 32.0)
     rpm_red_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
     race_panel.add_child(rpm_red_zone)
 
-    # Biała kreska pokazująca aktualne obroty.
     rpm_needle = ColorRect.new()
-    rpm_needle.color = Color(
-        1.0,
-        1.0,
-        1.0,
-        1.0
-    )
-    rpm_needle.position = Vector2(
-        310.0,
-        620.0
-    )
-    rpm_needle.size = Vector2(
-        5.0,
-        42.0
-    )
+    rpm_needle.color = Color(1.0, 1.0, 1.0, 1.0)
+    rpm_needle.position = Vector2(310.0, 620.0)
+    rpm_needle.size = Vector2(5.0, 42.0)
     rpm_needle.mouse_filter = Control.MOUSE_FILTER_IGNORE
     race_panel.add_child(rpm_needle)
 
-    rpm_zone_label = _label(
-        "",
-        Vector2(310.0, 592.0),
-        16
-    )
-    rpm_zone_label.size = Vector2(
-        610.0,
-        28.0
-    )
+    rpm_zone_label = _label("", Vector2(310.0, 592.0), 16)
+    rpm_zone_label.size = Vector2(610.0, 28.0)
     rpm_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    rpm_zone_label.modulate = Color(
-        0.90,
-        0.92,
-        0.96
-    )
+    rpm_zone_label.modulate = Color(0.90, 0.92, 0.96)
     race_panel.add_child(rpm_zone_label)
 
     gas_button = Button.new()
@@ -398,20 +352,24 @@ func _apply_screen() -> void:
     if state.screen == GameState.Screen.COUNTDOWN:
         player_car.position = Vector3(-1.70, 0.0, 0.0)
         opponent_car.position = Vector3(1.70, 0.0, 0.0)
+        last_player_wheel_distance = 0.0
+        last_opponent_wheel_distance = 0.0
 
     if state.screen == GameState.Screen.RESULT:
         _update_result_panel()
 
 
 func _update_world() -> void:
+    _update_wheel_animation()
+
     if state.screen == GameState.Screen.GARAGE:
-        var orbit := Time.get_ticks_msec() / 1000.0
+        var orbit: float = float(Time.get_ticks_msec()) / 1000.0
         camera.position = Vector3(
-            sin(orbit * 0.18) * 5.2,
-            2.5,
-            7.5 + cos(orbit * 0.18) * 1.0
+            -5.35 + sin(orbit * 0.16) * 0.75,
+            2.15,
+            -6.25 + cos(orbit * 0.16) * 0.85
         )
-        camera.look_at(Vector3(-1.70, 0.65, 0.0), Vector3.UP)
+        camera.look_at(Vector3(-1.70, 0.76, 0.0), Vector3.UP)
         return
 
     player_car.position.z = -state.player_distance
@@ -423,7 +381,7 @@ func _update_world() -> void:
 
     var player_z: float = -float(state.player_distance)
 
-    var start_pos := Vector3(-4.2, 1.65, player_z + 6.3)
+    var start_pos := Vector3(-5.0, 1.55, player_z - 5.9)
     var side_pos := Vector3(7.6, 2.05, player_z + 3.0)
     var cam_pos := start_pos.lerp(side_pos, blend)
 
@@ -466,179 +424,51 @@ func _update_ui() -> void:
 
 
 func _update_rpm_zones() -> void:
-    if rpm_green_zone == null:
-        return
-
-    if rpm_red_zone == null:
-        return
-
-    if rpm_needle == null:
-        return
-
-    if rpm_zone_label == null:
+    if rpm_green_zone == null or rpm_red_zone == null or rpm_needle == null or rpm_zone_label == null:
         return
 
     var meter_x: float = 310.0
     var meter_y: float = 625.0
     var meter_width: float = 610.0
     var meter_height: float = 32.0
-
-    var meter_max_rpm: float = float(
-        rpm_bar.max_value
-    )
-
+    var meter_max_rpm: float = float(rpm_bar.max_value)
     var zone_low: float = 0.0
     var zone_high: float = 0.0
 
     if state.screen == GameState.Screen.COUNTDOWN:
-        zone_low = float(
-            state.launch_green_low()
-        )
-
-        zone_high = float(
-            state.launch_green_high()
-        )
-
-        rpm_zone_label.text = (
-            "STREFA STARTU: %d-%d RPM"
-            % [
-                int(round(zone_low)),
-                int(round(zone_high))
-            ]
-        )
-
+        zone_low = float(state.launch_green_low())
+        zone_high = float(state.launch_green_high())
+        rpm_zone_label.text = "STREFA STARTU: %d-%d RPM" % [int(round(zone_low)), int(round(zone_high))]
     else:
-        zone_low = float(
-            state.green_low()
-        )
+        zone_low = float(state.green_low())
+        zone_high = float(state.green_high())
+        rpm_zone_label.text = "STREFA ZMIANY: %d-%d RPM" % [int(round(zone_low)), int(round(zone_high))]
 
-        zone_high = float(
-            state.green_high()
-        )
+    zone_low = clampf(zone_low, 0.0, meter_max_rpm)
+    zone_high = clampf(zone_high, zone_low, meter_max_rpm)
 
-        rpm_zone_label.text = (
-            "STREFA ZMIANY: %d-%d RPM"
-            % [
-                int(round(zone_low)),
-                int(round(zone_high))
-            ]
-        )
+    var green_start_ratio: float = zone_low / meter_max_rpm
+    var green_end_ratio: float = zone_high / meter_max_rpm
+    var green_x: float = meter_x + meter_width * green_start_ratio
+    var green_width: float = maxf(4.0, meter_width * (green_end_ratio - green_start_ratio))
+    rpm_green_zone.position = Vector2(green_x, meter_y)
+    rpm_green_zone.size = Vector2(green_width, meter_height)
 
-    zone_low = clampf(
-        zone_low,
-        0.0,
-        meter_max_rpm
-    )
+    var red_x: float = meter_x + meter_width * green_end_ratio
+    var red_width: float = maxf(4.0, (meter_x + meter_width) - red_x)
+    rpm_red_zone.position = Vector2(red_x, meter_y)
+    rpm_red_zone.size = Vector2(red_width, meter_height)
 
-    zone_high = clampf(
-        zone_high,
-        zone_low,
-        meter_max_rpm
-    )
+    var rpm_ratio: float = clampf(float(state.rpm) / meter_max_rpm, 0.0, 1.0)
+    var needle_x: float = meter_x + meter_width * rpm_ratio
+    rpm_needle.position = Vector2(needle_x - 2.5, meter_y - 5.0)
 
-    var green_start_ratio: float = (
-        zone_low / meter_max_rpm
-    )
-
-    var green_end_ratio: float = (
-        zone_high / meter_max_rpm
-    )
-
-    var green_x: float = (
-        meter_x
-        + meter_width
-        * green_start_ratio
-    )
-
-    var green_width: float = maxf(
-        4.0,
-        meter_width
-        * (
-            green_end_ratio
-            - green_start_ratio
-        )
-    )
-
-    rpm_green_zone.position = Vector2(
-        green_x,
-        meter_y
-    )
-
-    rpm_green_zone.size = Vector2(
-        green_width,
-        meter_height
-    )
-
-    # Czerwone pole zaczyna się bezpośrednio
-    # po zielonym zakresie.
-    var red_x: float = (
-        meter_x
-        + meter_width
-        * green_end_ratio
-    )
-
-    var red_width: float = maxf(
-        4.0,
-        (
-            meter_x
-            + meter_width
-        )
-        - red_x
-    )
-
-    rpm_red_zone.position = Vector2(
-        red_x,
-        meter_y
-    )
-
-    rpm_red_zone.size = Vector2(
-        red_width,
-        meter_height
-    )
-
-    # Aktualna pozycja obrotów.
-    var rpm_ratio: float = clampf(
-        float(state.rpm)
-        / meter_max_rpm,
-        0.0,
-        1.0
-    )
-
-    var needle_x: float = (
-        meter_x
-        + meter_width
-        * rpm_ratio
-    )
-
-    rpm_needle.position = Vector2(
-        needle_x - 2.5,
-        meter_y - 5.0
-    )
-
-    # Kolor liczby RPM.
     if state.rpm >= zone_low and state.rpm <= zone_high:
-
-        rpm_label.modulate = Color(
-            0.20,
-            1.0,
-            0.28
-        )
-
+        rpm_label.modulate = Color(0.20, 1.0, 0.28)
     elif state.rpm > zone_high:
-
-        rpm_label.modulate = Color(
-            1.0,
-            0.18,
-            0.12
-        )
-
+        rpm_label.modulate = Color(1.0, 0.18, 0.12)
     else:
-
-        rpm_label.modulate = Color(
-            1.0,
-            1.0,
-            1.0
-        )
+        rpm_label.modulate = Color(1.0, 1.0, 1.0)
 
 
 func _update_garage_ui() -> void:
@@ -723,8 +553,223 @@ func _shift_pressed() -> void:
 
 
 func _set_garage_camera() -> void:
-    camera.position = Vector3(4.7, 2.5, 7.8)
-    camera.look_at(Vector3(-1.70, 0.65, 0.0), Vector3.UP)
+    camera.position = Vector3(-5.35, 2.15, -6.25)
+    camera.look_at(Vector3(-1.70, 0.76, 0.0), Vector3.UP)
+
+
+func _create_golf_car(body_color: Color) -> Node3D:
+    if not ResourceLoader.exists(GOLF_MODEL_PATH):
+        return _create_golf_placeholder(body_color)
+
+    var model_resource: Resource = load(GOLF_MODEL_PATH)
+    if not (model_resource is PackedScene):
+        return _create_golf_placeholder(body_color)
+
+    var packed_scene: PackedScene = model_resource as PackedScene
+    var imported_node: Node = packed_scene.instantiate()
+    if not (imported_node is Node3D):
+        imported_node.queue_free()
+        return _create_golf_placeholder(body_color)
+
+    var wrapper := Node3D.new()
+    wrapper.name = "Golf7Car"
+
+    var imported_model: Node3D = imported_node as Node3D
+    imported_model.name = "Golf7Model"
+    imported_model.scale = Vector3.ONE * GOLF_MODEL_SCALE
+    imported_model.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+    imported_model.position = Vector3(0.0, 0.055, 0.0)
+
+    wrapper.add_child(imported_model)
+    wrapper.set_meta("real_golf_model", true)
+    return wrapper
+
+
+func _prepare_golf_runtime(car_root: Node3D, paint_color: Color, is_player: bool) -> void:
+    if not bool(car_root.get_meta("real_golf_model", false)):
+        return
+
+    var model_node: Node = car_root.find_child("Golf7Model", true, false)
+    if not (model_node is Node3D):
+        return
+
+    var model: Node3D = model_node as Node3D
+    _optimize_golf_visuals(model, paint_color)
+
+    var wheel_names: Array[String] = [
+        "3DWheel Front L",
+        "3DWheel Front R",
+        "3DWheel Rear L",
+        "3DWheel Rear R"
+    ]
+    var wheel_signs: Array[float] = [1.0, -1.0, 1.0, -1.0]
+
+    for index in range(wheel_names.size()):
+        var found_node: Node = model.find_child(wheel_names[index], true, false)
+        if not (found_node is Node3D):
+            continue
+
+        var wheel: Node3D = found_node as Node3D
+        _merge_wheel_geometry(wheel)
+
+        if is_player:
+            player_wheels.append(wheel)
+            player_wheel_signs.append(wheel_signs[index])
+        else:
+            opponent_wheels.append(wheel)
+            opponent_wheel_signs.append(wheel_signs[index])
+
+
+func _optimize_golf_visuals(model: Node3D, paint_color: Color) -> void:
+    var mesh_nodes: Array[Node] = model.find_children("*", "MeshInstance3D", true, false)
+
+    for node in mesh_nodes:
+        var mesh_instance: MeshInstance3D = node as MeshInstance3D
+        if mesh_instance == null or mesh_instance.mesh == null:
+            continue
+
+        var lower_name: String = String(mesh_instance.name).to_lower()
+
+        if (
+            lower_name.contains("interior")
+            or lower_name.contains("engine")
+            or lower_name.contains("windowinside")
+            or lower_name.contains("calliper")
+        ):
+            mesh_instance.visible = false
+            continue
+
+        if lower_name.contains("paint_geo") or lower_name.contains("paint_material"):
+            _tint_mesh_materials(mesh_instance, paint_color, false)
+        elif lower_name.contains("window_geo") or lower_name.contains("window_material"):
+            _tint_mesh_materials(mesh_instance, Color(0.012, 0.016, 0.024, 1.0), true)
+
+
+func _tint_mesh_materials(mesh_instance: MeshInstance3D, tint: Color, opaque_window: bool) -> void:
+    if mesh_instance.mesh == null:
+        return
+
+    var surface_count: int = mesh_instance.mesh.get_surface_count()
+    for surface_index in range(surface_count):
+        var active_material: Material = mesh_instance.get_active_material(surface_index)
+        if not (active_material is BaseMaterial3D):
+            continue
+
+        var copied_resource: Resource = active_material.duplicate(true)
+        if not (copied_resource is BaseMaterial3D):
+            continue
+
+        var copied_material: BaseMaterial3D = copied_resource as BaseMaterial3D
+        copied_material.albedo_color = tint
+
+        if opaque_window:
+            copied_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+            copied_material.metallic = 0.18
+            copied_material.roughness = 0.10
+        else:
+            copied_material.metallic = 0.58
+            copied_material.roughness = 0.18
+
+        mesh_instance.set_surface_override_material(surface_index, copied_material)
+
+
+func _merge_wheel_geometry(wheel: Node3D) -> void:
+    var mesh_nodes: Array[Node] = wheel.find_children("*", "MeshInstance3D", true, false)
+    if mesh_nodes.is_empty():
+        return
+
+    var surface_tool := SurfaceTool.new()
+    surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+    var first_material: Material = null
+    var appended_surfaces: int = 0
+    var wheel_inverse: Transform3D = wheel.global_transform.affine_inverse()
+
+    for node in mesh_nodes:
+        var mesh_instance: MeshInstance3D = node as MeshInstance3D
+        if mesh_instance == null or mesh_instance.mesh == null or not mesh_instance.visible:
+            continue
+
+        var source_mesh: Mesh = mesh_instance.mesh
+        var relative_transform: Transform3D = wheel_inverse * mesh_instance.global_transform
+        var surface_count: int = source_mesh.get_surface_count()
+
+        for surface_index in range(surface_count):
+            if source_mesh.surface_get_primitive_type(surface_index) != Mesh.PRIMITIVE_TRIANGLES:
+                continue
+
+            if first_material == null:
+                first_material = mesh_instance.get_active_material(surface_index)
+
+            surface_tool.append_from(source_mesh, surface_index, relative_transform)
+            appended_surfaces += 1
+
+    if appended_surfaces == 0:
+        return
+
+    if first_material != null:
+        surface_tool.set_material(first_material)
+
+    var merged_mesh: ArrayMesh = surface_tool.commit()
+    if merged_mesh == null:
+        return
+
+    var merged_instance := MeshInstance3D.new()
+    merged_instance.name = "MergedWheel"
+    merged_instance.mesh = merged_mesh
+    wheel.add_child(merged_instance)
+
+    for node in mesh_nodes:
+        if is_instance_valid(node):
+            node.queue_free()
+
+
+func _add_car_headlights(car_root: Node3D, energy: float) -> void:
+    if not bool(car_root.get_meta("real_golf_model", false)):
+        return
+
+    var x_positions: Array[float] = [-0.62, 0.62]
+    for x_value in x_positions:
+        var headlight := SpotLight3D.new()
+        headlight.position = Vector3(x_value, 0.64, -2.05)
+        headlight.light_color = Color(0.76, 0.86, 1.0)
+        headlight.light_energy = energy
+        headlight.spot_range = 14.0
+        headlight.spot_angle = 30.0
+        headlight.shadow_enabled = false
+        car_root.add_child(headlight)
+
+
+func _update_wheel_animation() -> void:
+    if state.screen == GameState.Screen.GARAGE:
+        last_player_wheel_distance = float(state.player_distance)
+        last_opponent_wheel_distance = float(state.opponent_distance)
+        return
+
+    var player_distance_now: float = float(state.player_distance)
+    var opponent_distance_now: float = float(state.opponent_distance)
+
+    var player_delta: float = maxf(0.0, player_distance_now - last_player_wheel_distance)
+    var opponent_delta: float = maxf(0.0, opponent_distance_now - last_opponent_wheel_distance)
+
+    _rotate_registered_wheels(player_wheels, player_wheel_signs, player_delta)
+    _rotate_registered_wheels(opponent_wheels, opponent_wheel_signs, opponent_delta)
+
+    last_player_wheel_distance = player_distance_now
+    last_opponent_wheel_distance = opponent_distance_now
+
+
+func _rotate_registered_wheels(wheels: Array[Node3D], signs: Array[float], distance_delta: float) -> void:
+    if distance_delta <= 0.0:
+        return
+
+    var wheel_count: int = mini(wheels.size(), signs.size())
+    var spin_angle: float = distance_delta / GameState.WHEEL_RADIUS_M
+
+    for index in range(wheel_count):
+        var wheel: Node3D = wheels[index]
+        if is_instance_valid(wheel):
+            wheel.rotate_x(spin_angle * signs[index])
 
 
 func _create_golf_placeholder(body_color: Color) -> Node3D:
@@ -749,13 +794,14 @@ func _create_golf_placeholder(body_color: Color) -> Node3D:
 
 
 func _add_lamp(x: float, z: float) -> void:
-    _add_box(
-        Vector3(x, 2.6, z),
-        Vector3(0.10, 5.2, 0.10),
-        Color(0.12, 0.13, 0.17),
-        0.65,
-        0.65
-    )
+    _add_box(Vector3(x, 2.6, z), Vector3(0.10, 5.2, 0.10), Color(0.12, 0.13, 0.17), 0.65, 0.65)
+
+    var light := OmniLight3D.new()
+    light.position = Vector3(x, 5.0, z)
+    light.light_color = Color(1.0, 0.75, 0.48)
+    light.light_energy = 3.2
+    light.omni_range = 10.0
+    add_child(light)
 
 
 func _add_box(position_value: Vector3, size_value: Vector3, color: Color, metallic: float, roughness: float) -> MeshInstance3D:

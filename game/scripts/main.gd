@@ -58,6 +58,7 @@ func _build_world() -> void:
     camera = Camera3D.new()
     add_child(camera)
     camera.current = true
+    camera.current = true
 
     var world := WorldEnvironment.new()
     var env := Environment.new()
@@ -330,7 +331,7 @@ func _update_world() -> void:
     if state.screen == GameState.Screen.RACING:
         blend = _smoothstep(0.0, 1.35, state.race_time)
 
-    var player_z := -state.player_distance
+    var player_z: float = -float(state.player_distance)
 
     var start_pos := Vector3(-4.2, 1.65, player_z + 6.3)
     var side_pos := Vector3(7.6, 2.05, player_z + 3.0)
@@ -384,7 +385,7 @@ func _update_garage_ui() -> void:
 
     for i in range(upgrade_labels.size()):
         var level: int = state.upgrades[i]
-        var cost := state.upgrade_cost(i)
+        var cost: int = int(state.upgrade_cost(i))
         upgrade_labels[i].text = "%s  LVL %d/5" % [GameState.UPGRADE_NAMES[i], level]
 
         if level >= 5:
@@ -533,5 +534,5 @@ func _label(text_value: String, position_value: Vector2, font_size: int) -> Labe
 
 
 func _smoothstep(edge0: float, edge1: float, value: float) -> float:
-    var t := clamp((value - edge0) / max(0.0001, edge1 - edge0), 0.0, 1.0)
+    var t: float = clampf((value - edge0) / maxf(0.0001, edge1 - edge0), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)

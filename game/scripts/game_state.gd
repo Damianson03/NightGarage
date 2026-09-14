@@ -1,6 +1,6 @@
 extends RefCounted
 
-const GAME_VERSION := "v0.2.1"
+const GAME_VERSION := "v0.2.2"
 const SAVE_PATH := "user://night_garage_save.cfg"
 
 # Volkswagen Golf VII 1.2 TSI 85 PS / 5MT baseline.
@@ -25,7 +25,7 @@ const FIRST_GEAR_TRACTION := 0.56
 const SECOND_GEAR_TRACTION := 0.32
 const RACE_DISTANCE_M := 402.336
 
-const GEAR_RATIOS := [3.77, 1.96, 1.28, 0.88, 0.67]
+const GEAR_RATIOS: Array[float] = [3.77, 1.96, 1.28, 0.88, 0.67]
 const MAX_GEARS := 5
 
 const UPGRADE_NAMES := [
@@ -37,7 +37,7 @@ const UPGRADE_NAMES := [
     "MASA"
 ]
 
-const UPGRADE_BASE_COST := [22000, 28000, 18000, 16000, 14000, 17000]
+const UPGRADE_BASE_COST: Array[int] = [22000, 28000, 18000, 16000, 14000, 17000]
 
 enum Screen {
     GARAGE,
@@ -57,7 +57,7 @@ var mode: int = Mode.CASH_RUN
 var money: int = 1_000_000
 var career_stage: int = 1
 var wins: int = 0
-var upgrades := [0, 0, 0, 0, 0, 0]
+var upgrades: Array[int] = [0, 0, 0, 0, 0, 0]
 
 var gas_held := false
 var rpm := IDLE_RPM
@@ -163,7 +163,7 @@ func upgrade_cost(index: int) -> int:
     if upgrades[index] >= 5:
         return 0
 
-    var level := upgrades[index]
+    var level: int = int(upgrades[index])
     return UPGRADE_BASE_COST[index] * (level + 1) * (level + 1)
 
 
@@ -295,7 +295,7 @@ func shift() -> void:
 
 
 func update(delta: float) -> void:
-    var dt := min(delta, 0.05)
+    var dt: float = minf(delta, 0.05)
 
     if shift_message_time > 0.0:
         shift_message_time -= dt
@@ -373,7 +373,7 @@ func _update_player_physics(dt: float) -> void:
         if active_shift_duration > 0.0:
             progress = clamp(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)
 
-        var target_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))
+        var target_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))
         var smooth := progress * progress * (3.0 - 2.0 * progress)
         rpm = lerpf(shift_start_rpm, target_rpm, smooth)
 
@@ -404,7 +404,7 @@ func _update_player_physics(dt: float) -> void:
             var traction_limit := mass * GRAVITY * SECOND_GEAR_TRACTION * grip
             drive_force = min(drive_force, traction_limit)
 
-        var launch_fade := max(0.0, 1.0 - race_time / 2.2)
+        var launch_fade: float = maxf(0.0, 1.0 - race_time / 2.2)
         drive_force *= max(0.70, 1.0 - launch_penalty * launch_fade)
 
         if rpm >= REV_LIMIT_RPM:
@@ -436,10 +436,10 @@ func _update_player_physics(dt: float) -> void:
 
 
 func calculate_engine_rpm() -> float:
-    var coupled_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))
+    var coupled_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))
 
     if gear == 1 and race_time < 0.90:
-        var coupling := clamp(race_time / 0.90, 0.0, 1.0)
+        var coupling: float = clampf(race_time / 0.90, 0.0, 1.0)
         var slipping_rpm := lerpf(launch_rpm_at_go, 1400.0, coupling)
         return max(coupled_rpm, slipping_rpm)
 
@@ -455,7 +455,7 @@ func rpm_from_speed(kmh: float, selected_gear: int) -> float:
 
 
 func engine_torque_nm(engine_rpm: float) -> float:
-    var r := max(700.0, engine_rpm)
+    var r: float = maxf(700.0, engine_rpm)
 
     if r < 800.0:
         return 70.0
@@ -487,7 +487,7 @@ func _update_opponent(dt: float) -> void:
     if opponent_max_speed > 1.0:
         speed_ratio = opponent_speed_kmh / opponent_max_speed
 
-    var aero_fade := max(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)
+    var aero_fade: float = maxf(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)
     var accel_kmh_per_sec := 9.3 * opponent_performance * aero_fade
 
     if race_time < 0.25:

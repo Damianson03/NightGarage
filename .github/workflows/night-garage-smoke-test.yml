@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
+      - 'NightGarage-v0.2.0-GameplayBase-source.zip'
 
 permissions:
   contents: write
@@ -26,239 +27,28 @@ jobs:
       - name: Install Gameplay Base source
         shell: bash
         run: |
-          cat > /tmp/nightgarage-v020.b64 <<'ARCHIVE'
-          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
-          KBgFo2AUjIJRMApGwSgYBaOAGAAAXU3xSwDIAAA=
-          ARCHIVE
+          test -f NightGarage-v0.2.0-GameplayBase-source.zip
 
-          base64 -d /tmp/nightgarage-v020.b64 > /tmp/nightgarage-v020.tar.gz
+          unzip -t NightGarage-v0.2.0-GameplayBase-source.zip
+
           rm -rf game
-          tar -xzf /tmp/nightgarage-v020.tar.gz -C .
+          unzip -q NightGarage-v0.2.0-GameplayBase-source.zip -d .
 
           test -f game/project.godot
+          test -f game/export_presets.cfg
+          test -f game/main.tscn
           test -f game/scripts/game_state.gd
           test -f game/scripts/main.gd
-          test -f game/export_presets.cfg
           test -f game/android/nightgarage-debug.keystore
+
+          echo "Gameplay Base source extracted correctly."
 
       - name: Commit Gameplay Base source
         shell: bash
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+
           git add game
 
           if git diff --cached --quiet; then
@@ -281,6 +71,7 @@ jobs:
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
+
           sdkmanager \
             "platform-tools" \
             "build-tools;35.0.1" \
@@ -297,8 +88,10 @@ jobs:
           unzip -q /tmp/godot.zip -d /tmp/godot
 
           GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+
           chmod +x "$GODOT_BIN"
           sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
+
           godot --version
 
       - name: Install Godot export templates
@@ -309,7 +102,11 @@ jobs:
             -O /tmp/templates.tpz
 
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
-          mkdir -p "$TEMPLATE_DIR" /tmp/templates_unpack
+
+          mkdir -p "$TEMPLATE_DIR"
+          rm -rf /tmp/templates_unpack
+          mkdir -p /tmp/templates_unpack
+
           unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
           cp -a /tmp/templates_unpack/templates/. "$TEMPLATE_DIR/"
 
@@ -345,6 +142,8 @@ jobs:
       - name: Export Night Garage Gameplay Base APK
         shell: bash
         run: |
+          mkdir -p game/build
+
           export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
           export GODOT_ANDROID_KEYSTORE_DEBUG_USER="nightgaragedebug"
           export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD="android"
@@ -358,6 +157,8 @@ jobs:
             --verbose
 
           test -f game/build/NightGarage-v0.2.0.apk
+
+          echo "Night Garage v0.2.0 APK created:"
           ls -lh game/build/NightGarage-v0.2.0.apk
 
       - name: Upload Night Garage Gameplay Base APK

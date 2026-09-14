@@ -59,6 +59,7 @@ func _build_world() -> void:
     add_child(camera)
     camera.current = true
     camera.current = true
+    camera.current = true
 
     var world := WorldEnvironment.new()
     var env := Environment.new()
@@ -365,7 +366,7 @@ func _update_ui() -> void:
 
         if state.screen == GameState.Screen.COUNTDOWN:
             countdown_label.visible = true
-            countdown_label.text = str(max(1, int(ceil(min(state.countdown, 3.0)))))
+            countdown_label.text = str(maxi(1, int(ceil(minf(float(state.countdown), 3.0)))))
         else:
             countdown_label.visible = state.race_time < 0.55
             countdown_label.text = "GO"

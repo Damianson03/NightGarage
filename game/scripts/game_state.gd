@@ -1,6 +1,6 @@
 extends RefCounted
 
-const GAME_VERSION := "v0.2.2"
+const GAME_VERSION := "v0.2.3"
 const SAVE_PATH := "user://night_garage_save.cfg"
 
 # Volkswagen Golf VII 1.2 TSI 85 PS / 5MT baseline.
@@ -137,7 +137,7 @@ func weight_kg() -> float:
 
 
 func shift_duration() -> float:
-    return max(0.35, 0.60 - float(upgrades[2]) * 0.05)
+    return maxf(0.35, 0.60 - float(upgrades[2]) * 0.05)
 
 
 func tire_grip_multiplier() -> float:
@@ -230,7 +230,7 @@ func start_race(selected_mode: int) -> void:
     var player_perf := performance_index()
 
     if mode == Mode.CAREER:
-        opponent_performance = 0.95 + float(max(0, career_stage - 1)) * 0.045
+        opponent_performance = 0.95 + float(maxi(0, career_stage - 1)) * 0.045
     else:
         opponent_performance = player_perf * randf_range(0.96, 1.04)
 
@@ -270,7 +270,7 @@ func shift() -> void:
 
     var center := (SHIFT_GREEN_LOW + SHIFT_GREEN_HIGH) * 0.5
     var half_width := (SHIFT_GREEN_HIGH - SHIFT_GREEN_LOW) * 0.5
-    var diff := abs(rpm - center)
+    var diff: float = absf(rpm - center)
     var extra_delay := 0.0
 
     if diff <= half_width * 0.35:
@@ -332,7 +332,7 @@ func _update_countdown(dt: float) -> void:
     else:
         rpm -= fall_rate * dt
 
-    rpm = clamp(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)
+    rpm = clampf(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)
     countdown -= dt
 
     if countdown > 0.0:
@@ -342,9 +342,9 @@ func _update_countdown(dt: float) -> void:
     var hi := launch_green_high()
     var center := (lo + hi) * 0.5
     var half_width := (hi - lo) * 0.5
-    var diff := abs(rpm - center)
+    var diff: float = absf(rpm - center)
 
-    launch_quality = clamp(1.0 - diff / (half_width * 2.0), 0.0, 1.0)
+    launch_quality = clampf(1.0 - diff / (half_width * 2.0), 0.0, 1.0)
     launch_penalty = (1.0 - launch_quality) * 0.30
     launch_rpm_at_go = rpm
 
@@ -371,7 +371,7 @@ func _update_player_physics(dt: float) -> void:
 
         var progress := 1.0
         if active_shift_duration > 0.0:
-            progress = clamp(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)
+            progress = clampf(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)
 
         var target_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))
         var smooth := progress * progress * (3.0 - 2.0 * progress)
@@ -380,7 +380,7 @@ func _update_player_physics(dt: float) -> void:
         if shift_timer <= 0.0:
             gear = pending_gear
             shifting = false
-            rpm = max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))
+            rpm = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))
     else:
         rpm = calculate_engine_rpm()
 
@@ -399,13 +399,13 @@ func _update_player_physics(dt: float) -> void:
 
         if gear == 1:
             var traction_limit := mass * GRAVITY * FIRST_GEAR_TRACTION * grip
-            drive_force = min(drive_force, traction_limit)
+            drive_force = minf(drive_force, traction_limit)
         elif gear == 2:
             var traction_limit := mass * GRAVITY * SECOND_GEAR_TRACTION * grip
-            drive_force = min(drive_force, traction_limit)
+            drive_force = minf(drive_force, traction_limit)
 
         var launch_fade: float = maxf(0.0, 1.0 - race_time / 2.2)
-        drive_force *= max(0.70, 1.0 - launch_penalty * launch_fade)
+        drive_force *= maxf(0.70, 1.0 - launch_penalty * launch_fade)
 
         if rpm >= REV_LIMIT_RPM:
             drive_force *= 0.08
@@ -417,14 +417,14 @@ func _update_player_physics(dt: float) -> void:
     var accel_ms2 := net_force / mass
 
     speed_ms += accel_ms2 * dt
-    speed_ms = max(0.0, speed_ms)
+    speed_ms = maxf(0.0, speed_ms)
     speed_kmh = speed_ms * 3.6
 
     if not shifting:
         rpm = calculate_engine_rpm()
 
     player_distance += speed_ms * dt
-    max_speed_seen = max(max_speed_seen, speed_kmh)
+    max_speed_seen = maxf(max_speed_seen, speed_kmh)
 
     if zero_to_100_time < 0.0 and speed_kmh >= 100.0:
         zero_to_100_time = race_time
@@ -441,7 +441,7 @@ func calculate_engine_rpm() -> float:
     if gear == 1 and race_time < 0.90:
         var coupling: float = clampf(race_time / 0.90, 0.0, 1.0)
         var slipping_rpm := lerpf(launch_rpm_at_go, 1400.0, coupling)
-        return max(coupled_rpm, slipping_rpm)
+        return maxf(coupled_rpm, slipping_rpm)
 
     return coupled_rpm
 
@@ -494,7 +494,7 @@ func _update_opponent(dt: float) -> void:
         accel_kmh_per_sec *= 0.75
 
     opponent_speed_kmh += accel_kmh_per_sec * dt
-    opponent_speed_kmh = min(opponent_speed_kmh, opponent_max_speed)
+    opponent_speed_kmh = minf(opponent_speed_kmh, opponent_max_speed)
     opponent_distance += (opponent_speed_kmh / 3.6) * dt
 
     if opponent_distance >= RACE_DISTANCE_M:

@@ -1,4 +1,4 @@
-name: Night Garage v0.2.3 - Variant Type Hotfix
+name: Night Garage v0.2.4 - RPM Zones
 
 on:
   workflow_dispatch:
@@ -24,243 +24,448 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Apply v0.2.3 strict typing hotfix
+      - name: Add RPM green and red zones
         shell: bash
         run: |
           test -f game/scripts/main.gd
           test -f game/scripts/game_state.gd
-          test -f game/project.godot
           test -f game/export_presets.cfg
           test -f game/android/nightgarage-debug.keystore
 
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           main_path = Path("game/scripts/main.gd")
           main = main_path.read_text(encoding="utf-8")
 
-          main = main.replace(
-              "func _ready() -> void:\n    _build_world()\n    _build_ui()\n    _apply_screen()\n",
-              "func _ready() -> void:\n    _build_ui()\n    _build_world()\n    _apply_screen()\n    _update_ui()\n",
-          )
+          # ---------------------------------------------------------
+          # Dodatkowe elementy HUD
+          # ---------------------------------------------------------
 
-          main = main.replace(
-              "    camera = Camera3D.new()\n    add_child(camera)\n",
-              "    camera = Camera3D.new()\n    add_child(camera)\n    camera.current = true\n",
-              1,
-          )
-
-          main = main.replace(
-              "    moon.shadow_enabled = true\n",
-              "    moon.shadow_enabled = false\n",
-              1,
-          )
-
-          main = main.replace(
-              "    var player_z := -state.player_distance\n",
-              "    var player_z: float = -float(state.player_distance)\n",
-          )
-
-          main = main.replace(
-              "        var cost := state.upgrade_cost(i)\n",
-              "        var cost: int = int(state.upgrade_cost(i))\n",
-          )
-
-          main = main.replace(
-              "    var t := clamp((value - edge0) / max(0.0001, edge1 - edge0), 0.0, 1.0)\n",
-              "    var t: float = clampf((value - edge0) / maxf(0.0001, edge1 - edge0), 0.0, 1.0)\n",
-          )
-
-          main = main.replace(
-              "str(max(1, int(ceil(min(state.countdown, 3.0)))))",
-              "str(maxi(1, int(ceil(minf(float(state.countdown), 3.0)))))",
-          )
-
-          main_path.write_text(main, encoding="utf-8")
-
-          state_path = Path("game/scripts/game_state.gd")
-          state = state_path.read_text(encoding="utf-8")
-
-          for old in ["v0.2.0", "v0.2.1", "v0.2.2"]:
-              state = state.replace(
-                  f'const GAME_VERSION := "{old}"',
-                  'const GAME_VERSION := "v0.2.3"',
+          if "var rpm_green_zone: ColorRect" not in main:
+              main = main.replace(
+                  "var rpm_bar: ProgressBar\n",
+                  """var rpm_bar: ProgressBar
+          var rpm_green_zone: ColorRect
+          var rpm_red_zone: ColorRect
+          var rpm_needle: ColorRect
+          var rpm_zone_label: Label
+          """,
+                  1
               )
 
-          state = state.replace(
-              "const GEAR_RATIOS := [3.77, 1.96, 1.28, 0.88, 0.67]",
-              "const GEAR_RATIOS: Array[float] = [3.77, 1.96, 1.28, 0.88, 0.67]",
+          # ---------------------------------------------------------
+          # Tworzenie stref RPM
+          # ---------------------------------------------------------
+
+          marker = """    race_panel.add_child(rpm_bar)
+          """
+
+          zone_code = """    race_panel.add_child(rpm_bar)
+
+              # Pasek bazowy zostawiamy lekko przezroczysty,
+              # żeby kolorowe strefy były bardzo dobrze widoczne.
+              rpm_bar.modulate = Color(
+                  0.62,
+                  0.72,
+                  1.0,
+                  0.42
+              )
+
+              # Zielona strefa:
+              # countdown = idealny start
+              # race = idealna zmiana biegu
+              rpm_green_zone = ColorRect.new()
+              rpm_green_zone.color = Color(
+                  0.08,
+                  0.95,
+                  0.22,
+                  0.72
+              )
+              rpm_green_zone.position = Vector2(
+                  310.0,
+                  625.0
+              )
+              rpm_green_zone.size = Vector2(
+                  10.0,
+                  32.0
+              )
+              rpm_green_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+              race_panel.add_child(rpm_green_zone)
+
+              # Czerwona strefa oznacza za wysokie RPM.
+              rpm_red_zone = ColorRect.new()
+              rpm_red_zone.color = Color(
+                  1.0,
+                  0.08,
+                  0.06,
+                  0.68
+              )
+              rpm_red_zone.position = Vector2(
+                  850.0,
+                  625.0
+              )
+              rpm_red_zone.size = Vector2(
+                  70.0,
+                  32.0
+              )
+              rpm_red_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+              race_panel.add_child(rpm_red_zone)
+
+              # Biała kreska pokazująca aktualne obroty.
+              rpm_needle = ColorRect.new()
+              rpm_needle.color = Color(
+                  1.0,
+                  1.0,
+                  1.0,
+                  1.0
+              )
+              rpm_needle.position = Vector2(
+                  310.0,
+                  620.0
+              )
+              rpm_needle.size = Vector2(
+                  5.0,
+                  42.0
+              )
+              rpm_needle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+              race_panel.add_child(rpm_needle)
+
+              rpm_zone_label = _label(
+                  "",
+                  Vector2(310.0, 592.0),
+                  16
+              )
+              rpm_zone_label.size = Vector2(
+                  610.0,
+                  28.0
+              )
+              rpm_zone_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+              rpm_zone_label.modulate = Color(
+                  0.90,
+                  0.92,
+                  0.96
+              )
+              race_panel.add_child(rpm_zone_label)
+          """
+
+          if marker in main and "rpm_green_zone = ColorRect.new()" not in main:
+              main = main.replace(
+                  marker,
+                  zone_code,
+                  1
+              )
+
+          # ---------------------------------------------------------
+          # Aktualizacja stref podczas jazdy
+          # ---------------------------------------------------------
+
+          update_marker = """        rpm_bar.value = state.rpm
+          """
+
+          update_replacement = """        rpm_bar.value = state.rpm
+                  _update_rpm_zones()
+          """
+
+          if update_marker in main and "_update_rpm_zones()" not in main:
+              main = main.replace(
+                  update_marker,
+                  update_replacement,
+                  1
+              )
+
+          # Jeżeli sama funkcja jeszcze nie istnieje, dodajemy ją
+          # przed _update_garage_ui().
+          if "func _update_rpm_zones() -> void:" not in main:
+
+              function_marker = "\n\nfunc _update_garage_ui() -> void:\n"
+
+              rpm_function = """
+
+          func _update_rpm_zones() -> void:
+              if rpm_green_zone == null:
+                  return
+
+              if rpm_red_zone == null:
+                  return
+
+              if rpm_needle == null:
+                  return
+
+              if rpm_zone_label == null:
+                  return
+
+              var meter_x: float = 310.0
+              var meter_y: float = 625.0
+              var meter_width: float = 610.0
+              var meter_height: float = 32.0
+
+              var meter_max_rpm: float = float(
+                  rpm_bar.max_value
+              )
+
+              var zone_low: float = 0.0
+              var zone_high: float = 0.0
+
+              if state.screen == GameState.Screen.COUNTDOWN:
+                  zone_low = float(
+                      state.launch_green_low()
+                  )
+
+                  zone_high = float(
+                      state.launch_green_high()
+                  )
+
+                  rpm_zone_label.text = (
+                      "STREFA STARTU: %d-%d RPM"
+                      % [
+                          int(round(zone_low)),
+                          int(round(zone_high))
+                      ]
+                  )
+
+              else:
+                  zone_low = float(
+                      state.green_low()
+                  )
+
+                  zone_high = float(
+                      state.green_high()
+                  )
+
+                  rpm_zone_label.text = (
+                      "STREFA ZMIANY: %d-%d RPM"
+                      % [
+                          int(round(zone_low)),
+                          int(round(zone_high))
+                      ]
+                  )
+
+              zone_low = clampf(
+                  zone_low,
+                  0.0,
+                  meter_max_rpm
+              )
+
+              zone_high = clampf(
+                  zone_high,
+                  zone_low,
+                  meter_max_rpm
+              )
+
+              var green_start_ratio: float = (
+                  zone_low / meter_max_rpm
+              )
+
+              var green_end_ratio: float = (
+                  zone_high / meter_max_rpm
+              )
+
+              var green_x: float = (
+                  meter_x
+                  + meter_width
+                  * green_start_ratio
+              )
+
+              var green_width: float = maxf(
+                  4.0,
+                  meter_width
+                  * (
+                      green_end_ratio
+                      - green_start_ratio
+                  )
+              )
+
+              rpm_green_zone.position = Vector2(
+                  green_x,
+                  meter_y
+              )
+
+              rpm_green_zone.size = Vector2(
+                  green_width,
+                  meter_height
+              )
+
+              # Czerwone pole zaczyna się bezpośrednio
+              # po zielonym zakresie.
+              var red_x: float = (
+                  meter_x
+                  + meter_width
+                  * green_end_ratio
+              )
+
+              var red_width: float = maxf(
+                  4.0,
+                  (
+                      meter_x
+                      + meter_width
+                  )
+                  - red_x
+              )
+
+              rpm_red_zone.position = Vector2(
+                  red_x,
+                  meter_y
+              )
+
+              rpm_red_zone.size = Vector2(
+                  red_width,
+                  meter_height
+              )
+
+              # Aktualna pozycja obrotów.
+              var rpm_ratio: float = clampf(
+                  float(state.rpm)
+                  / meter_max_rpm,
+                  0.0,
+                  1.0
+              )
+
+              var needle_x: float = (
+                  meter_x
+                  + meter_width
+                  * rpm_ratio
+              )
+
+              rpm_needle.position = Vector2(
+                  needle_x - 2.5,
+                  meter_y - 5.0
+              )
+
+              # Kolor liczby RPM.
+              if state.rpm >= zone_low and state.rpm <= zone_high:
+
+                  rpm_label.modulate = Color(
+                      0.20,
+                      1.0,
+                      0.28
+                  )
+
+              elif state.rpm > zone_high:
+
+                  rpm_label.modulate = Color(
+                      1.0,
+                      0.18,
+                      0.12
+                  )
+
+              else:
+
+                  rpm_label.modulate = Color(
+                      1.0,
+                      1.0,
+                      1.0
+                  )
+          """
+
+              if function_marker not in main:
+                  raise SystemExit(
+                      "Nie znaleziono _update_garage_ui() w main.gd"
+                  )
+
+              main = main.replace(
+                  function_marker,
+                  rpm_function + function_marker,
+                  1
+              )
+
+          main_path.write_text(
+              main,
+              encoding="utf-8"
           )
 
-          state = state.replace(
-              "const UPGRADE_BASE_COST := [22000, 28000, 18000, 16000, 14000, 17000]",
-              "const UPGRADE_BASE_COST: Array[int] = [22000, 28000, 18000, 16000, 14000, 17000]",
+          # ---------------------------------------------------------
+          # Numer wersji gry
+          # ---------------------------------------------------------
+
+          state_path = Path(
+              "game/scripts/game_state.gd"
           )
 
-          state = state.replace(
-              "var upgrades := [0, 0, 0, 0, 0, 0]",
-              "var upgrades: Array[int] = [0, 0, 0, 0, 0, 0]",
+          state = state_path.read_text(
+              encoding="utf-8"
           )
 
-          state = state.replace(
-              "    var diff := abs(rpm - center)\n",
-              "    var diff: float = absf(rpm - center)\n",
+          state = re.sub(
+              r'const GAME_VERSION := "v[^"]+"',
+              'const GAME_VERSION := "v0.2.4"',
+              state,
+              count=1
           )
 
-          state = state.replace(
-              "    return max(0.35, 0.60 - float(upgrades[2]) * 0.05)",
-              "    return maxf(0.35, 0.60 - float(upgrades[2]) * 0.05)",
+          state_path.write_text(
+              state,
+              encoding="utf-8"
           )
 
-          state = state.replace(
-              "float(max(0, career_stage - 1))",
-              "float(maxi(0, career_stage - 1))",
+          # ---------------------------------------------------------
+          # Numer APK
+          # ---------------------------------------------------------
+
+          preset_path = Path(
+              "game/export_presets.cfg"
           )
 
-          state = state.replace(
-              "    var dt := min(delta, 0.05)",
-              "    var dt: float = minf(delta, 0.05)",
+          preset = preset_path.read_text(
+              encoding="utf-8"
           )
 
-          state = state.replace(
-              "    rpm = clamp(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)",
-              "    rpm = clampf(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)",
+          preset = re.sub(
+              r'export_path="build/NightGarage-v[^"]+\\.apk"',
+              'export_path="build/NightGarage-v0.2.4.apk"',
+              preset,
+              count=1
           )
 
-          state = state.replace(
-              "    launch_quality = clamp(1.0 - diff / (half_width * 2.0), 0.0, 1.0)",
-              "    launch_quality = clampf(1.0 - diff / (half_width * 2.0), 0.0, 1.0)",
+          preset = re.sub(
+              r'version/code=\\d+',
+              'version/code=4',
+              preset,
+              count=1
           )
 
-          state = state.replace(
-              "            progress = clamp(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)",
-              "            progress = clampf(1.0 - shift_timer / active_shift_duration, 0.0, 1.0)",
+          preset = re.sub(
+              r'version/name="[^"]+"',
+              'version/name="0.2.4"',
+              preset,
+              count=1
           )
 
-          state = state.replace(
-              "        var target_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))",
-              "        var target_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, pending_gear))",
+          preset_path.write_text(
+              preset,
+              encoding="utf-8"
           )
-
-          state = state.replace(
-              "            rpm = max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
-              "            rpm = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
-          )
-
-          state = state.replace(
-              "            drive_force = min(drive_force, traction_limit)",
-              "            drive_force = minf(drive_force, traction_limit)",
-          )
-
-          state = state.replace(
-              "        var launch_fade := max(0.0, 1.0 - race_time / 2.2)",
-              "        var launch_fade: float = maxf(0.0, 1.0 - race_time / 2.2)",
-          )
-
-          state = state.replace(
-              "        drive_force *= max(0.70, 1.0 - launch_penalty * launch_fade)",
-              "        drive_force *= maxf(0.70, 1.0 - launch_penalty * launch_fade)",
-          )
-
-          state = state.replace(
-              "    speed_ms = max(0.0, speed_ms)",
-              "    speed_ms = maxf(0.0, speed_ms)",
-          )
-
-          state = state.replace(
-              "    max_speed_seen = max(max_speed_seen, speed_kmh)",
-              "    max_speed_seen = maxf(max_speed_seen, speed_kmh)",
-          )
-
-          state = state.replace(
-              "    var coupled_rpm := max(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
-              "    var coupled_rpm: float = maxf(IDLE_RPM, rpm_from_speed(speed_kmh, gear))",
-          )
-
-          state = state.replace(
-              "        var coupling := clamp(race_time / 0.90, 0.0, 1.0)",
-              "        var coupling: float = clampf(race_time / 0.90, 0.0, 1.0)",
-          )
-
-          state = state.replace(
-              "        return max(coupled_rpm, slipping_rpm)",
-              "        return maxf(coupled_rpm, slipping_rpm)",
-          )
-
-          state = state.replace(
-              "    var r := max(700.0, engine_rpm)",
-              "    var r: float = maxf(700.0, engine_rpm)",
-          )
-
-          state = state.replace(
-              "    var aero_fade := max(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)",
-              "    var aero_fade: float = maxf(0.18, 1.0 - speed_ratio * speed_ratio * 0.82)",
-          )
-
-          state = state.replace(
-              "    opponent_speed_kmh = min(opponent_speed_kmh, opponent_max_speed)",
-              "    opponent_speed_kmh = minf(opponent_speed_kmh, opponent_max_speed)",
-          )
-
-          state = state.replace(
-              "    var level := upgrades[index]",
-              "    var level: int = int(upgrades[index])",
-          )
-
-          state_path.write_text(state, encoding="utf-8")
-
-          preset_path = Path("game/export_presets.cfg")
-          preset = preset_path.read_text(encoding="utf-8")
-
-          preset = preset.replace(
-              'export_path="build/NightGarage-v0.2.0.apk"',
-              'export_path="build/NightGarage-v0.2.3.apk"'
-          )
-
-          preset = preset.replace(
-              'export_path="build/NightGarage-v0.2.1.apk"',
-              'export_path="build/NightGarage-v0.2.3.apk"'
-          )
-
-          preset = preset.replace(
-              'export_path="build/NightGarage-v0.2.2.apk"',
-              'export_path="build/NightGarage-v0.2.3.apk"'
-          )
-
-          preset = preset.replace(
-              'version/code=2',
-              'version/code=3'
-          )
-
-          preset = preset.replace(
-              'version/name="0.2.0"',
-              'version/name="0.2.3"'
-          )
-
-          preset = preset.replace(
-              'version/name="0.2.1"',
-              'version/name="0.2.3"'
-          )
-
-          preset = preset.replace(
-              'version/name="0.2.2"',
-              'version/name="0.2.3"'
-          )
-
-          preset_path.write_text(preset, encoding="utf-8")
           PY
 
-          echo "===== V0.2.3 CHECK ====="
-          grep -n "GAME_VERSION" game/scripts/game_state.gd
-          grep -n "var diff" game/scripts/game_state.gd
-          grep -n "player_z" game/scripts/main.gd
-          grep -n "version/name" game/export_presets.cfg
+          echo "===== NIGHT GARAGE V0.2.4 ====="
 
-      - name: Commit v0.2.3 source
+          grep -n \
+            "GAME_VERSION" \
+            game/scripts/game_state.gd
+
+          grep -n \
+            "rpm_green_zone" \
+            game/scripts/main.gd | head
+
+          grep -n \
+            "_update_rpm_zones" \
+            game/scripts/main.gd
+
+          grep -n \
+            "version/name" \
+            game/export_presets.cfg
+
+      - name: Commit v0.2.4 source
         shell: bash
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config \
+            user.name \
+            "github-actions"
+
+          git config \
+            user.email \
+            "github-actions@github.com"
 
           git add \
             game/scripts/main.gd \
@@ -268,10 +473,16 @@ jobs:
             game/export_presets.cfg
 
           if git diff --cached --quiet; then
-            echo "v0.2.3 source already present."
+
+            echo "v0.2.4 source already present."
+
           else
-            git commit -m "Fix strict GDScript typing in v0.2.3 [skip ci]"
+
+            git commit \
+              -m "Add RPM green and red zones v0.2.4 [skip ci]"
+
             git push
+
           fi
 
       - name: Set up Java 17
@@ -301,12 +512,25 @@ jobs:
             -O /tmp/godot.zip
 
           mkdir -p /tmp/godot
-          unzip -q /tmp/godot.zip -d /tmp/godot
 
-          GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+          unzip -q \
+            /tmp/godot.zip \
+            -d /tmp/godot
+
+          GODOT_BIN="$(
+            find \
+              /tmp/godot \
+              -maxdepth 1 \
+              -type f \
+              -name 'Godot_v*_linux.x86_64' \
+              | head -n 1
+          )"
 
           chmod +x "$GODOT_BIN"
-          sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
+
+          sudo ln -sf \
+            "$GODOT_BIN" \
+            /usr/local/bin/godot
 
           godot --version
 
@@ -320,11 +544,18 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
 
           mkdir -p "$TEMPLATE_DIR"
+
           rm -rf /tmp/templates_unpack
+
           mkdir -p /tmp/templates_unpack
 
-          unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
-          cp -a /tmp/templates_unpack/templates/. "$TEMPLATE_DIR/"
+          unzip -q \
+            /tmp/templates.tpz \
+            -d /tmp/templates_unpack
+
+          cp -a \
+            /tmp/templates_unpack/templates/. \
+            "$TEMPLATE_DIR/"
 
       - name: Configure Godot Android paths
         shell: bash
@@ -332,6 +563,7 @@ jobs:
           mkdir -p "$HOME/.config/godot"
 
           KEYSTORE_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
+
           test -f "$KEYSTORE_PATH"
 
           cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
@@ -365,14 +597,17 @@ jobs:
             --path game \
             --quit-after 8 \
             --verbose \
-            2>&1 | tee /tmp/nightgarage-runtime.log
+            2>&1 \
+            | tee /tmp/nightgarage-runtime.log
 
           GODOT_EXIT=${PIPESTATUS[0]}
+
           set -e
 
           if grep -Eiq \
             'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
-            /tmp/nightgarage-runtime.log; then
+            /tmp/nightgarage-runtime.log
+          then
 
             echo "Runtime/script error detected:"
 
@@ -381,22 +616,28 @@ jobs:
               /tmp/nightgarage-runtime.log
 
             exit 1
+
           fi
 
           if [ "$GODOT_EXIT" -ne 0 ]; then
+
             echo "Godot runtime smoke test exited with code $GODOT_EXIT"
+
             exit "$GODOT_EXIT"
+
           fi
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.2.3 APK
+      - name: Export Night Garage v0.2.4 APK
         shell: bash
         run: |
           mkdir -p game/build
 
           export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
+
           export GODOT_ANDROID_KEYSTORE_DEBUG_USER="nightgaragedebug"
+
           export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD="android"
 
           godot \
@@ -404,17 +645,19 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.2.3.apk" \
+            "build/NightGarage-v0.2.4.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.2.3.apk
+          test -f \
+            game/build/NightGarage-v0.2.4.apk
 
-          ls -lh game/build/NightGarage-v0.2.3.apk
+          ls -lh \
+            game/build/NightGarage-v0.2.4.apk
 
-      - name: Upload Night Garage v0.2.3 APK
+      - name: Upload Night Garage v0.2.4 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.2.3-GameplayBase
-          path: game/build/NightGarage-v0.2.3.apk
+          name: NightGarage-v0.2.4-RPMZones
+          path: game/build/NightGarage-v0.2.4.apk
           if-no-files-found: error
           retention-days: 14

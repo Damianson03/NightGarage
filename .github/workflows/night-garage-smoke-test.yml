@@ -1,0 +1,538 @@
+name: Night Garage - Godot Android Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      GODOT_VERSION: '4.6.2'
+      GODOT_STATUS: 'stable'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+
+          sdkmanager \
+            "platform-tools" \
+            "build-tools;35.0.1" \
+            "platforms;android-35"
+
+      - name: Download Godot
+        shell: bash
+        run: |
+          wget -q \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_STATUS}/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_linux.x86_64.zip" \
+            -O /tmp/godot.zip
+
+          mkdir -p /tmp/godot
+          unzip -q /tmp/godot.zip -d /tmp/godot
+
+          GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+
+          chmod +x "$GODOT_BIN"
+          sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
+
+          godot --version
+
+      - name: Install Godot export templates
+        shell: bash
+        run: |
+          wget -q \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_STATUS}/Godot_v${GODOT_VERSION}-${GODOT_STATUS}_export_templates.tpz" \
+            -O /tmp/templates.tpz
+
+          TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+
+          mkdir -p "$TEMPLATE_DIR"
+          mkdir -p /tmp/templates_unpack
+
+          unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
+
+          cp -a \
+            /tmp/templates_unpack/templates/. \
+            "$TEMPLATE_DIR/"
+
+          echo "Templates installed in:"
+          echo "$TEMPLATE_DIR"
+
+          ls -la "$TEMPLATE_DIR"
+
+      - name: Create Android debug keystore
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.android"
+
+          keytool \
+            -genkeypair \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Configure Godot Android paths
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.config/godot"
+
+          cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Create clean Night Garage Godot project
+        shell: bash
+        run: |
+          rm -rf game
+          mkdir -p game/build
+
+          cat > game/project.godot <<'EOF'
+          ; Night Garage v0.1.0
+          config_version=5
+
+          [application]
+
+          config/name="Night Garage"
+          run/main_scene="res://main.tscn"
+          config/features=PackedStringArray("4.6", "Mobile")
+
+          [display]
+
+          window/size/viewport_width=1280
+          window/size/viewport_height=720
+          window/size/window_width_override=1280
+          window/size/window_height_override=720
+          window/stretch/mode="canvas_items"
+          window/handheld/orientation=0
+          window/energy_saving/keep_screen_on=true
+
+          [rendering]
+
+          renderer/rendering_method="mobile"
+          renderer/rendering_method.mobile="mobile"
+
+          ; Ważne obejście błędu eksportu Androida
+          ; w Godot 4.6 na Linux x86_64.
+          textures/vram_compression/import_etc2_astc=true
+
+          environment/defaults/default_clear_color=Color(0.008, 0.012, 0.025, 1)
+          EOF
+
+          cat > game/main.tscn <<'EOF'
+          [gd_scene load_steps=2 format=3]
+
+          [ext_resource type="Script" path="res://main.gd" id="1_script"]
+
+          [node name="Main" type="Node3D"]
+          script = ExtResource("1_script")
+          EOF
+
+          cat > game/main.gd <<'EOF'
+          extends Node3D
+
+          var car: MeshInstance3D
+          var elapsed := 0.0
+
+
+          func _ready() -> void:
+              _build_world()
+              _build_ui()
+
+
+          func _process(delta: float) -> void:
+              elapsed += delta
+
+              if car:
+                  car.rotation.y = sin(elapsed * 0.55) * 0.08
+
+
+          func _build_world() -> void:
+
+              # Kamera
+              var camera := Camera3D.new()
+
+              camera.position = Vector3(
+                  5.8,
+                  3.2,
+                  7.8
+              )
+
+              add_child(camera)
+
+              camera.look_at(
+                  Vector3(
+                      0.0,
+                      0.7,
+                      0.0
+                  ),
+                  Vector3.UP
+              )
+
+
+              # Główne światło
+              var light := DirectionalLight3D.new()
+
+              light.rotation_degrees = Vector3(
+                  -48.0,
+                  -32.0,
+                  0.0
+              )
+
+              light.light_energy = 2.2
+              light.shadow_enabled = true
+
+              add_child(light)
+
+
+              # Niebieskie nocne światło
+              var fill := OmniLight3D.new()
+
+              fill.position = Vector3(
+                  -3.0,
+                  2.8,
+                  2.0
+              )
+
+              fill.light_color = Color(
+                  0.25,
+                  0.45,
+                  1.0
+              )
+
+              fill.light_energy = 5.0
+              fill.omni_range = 12.0
+
+              add_child(fill)
+
+
+              # Droga
+              var road := MeshInstance3D.new()
+
+              var road_mesh := BoxMesh.new()
+
+              road_mesh.size = Vector3(
+                  14.0,
+                  0.12,
+                  32.0
+              )
+
+              road.mesh = road_mesh
+
+              road.position = Vector3(
+                  0.0,
+                  -0.10,
+                  -7.0
+              )
+
+              var road_mat := StandardMaterial3D.new()
+
+              road_mat.albedo_color = Color(
+                  0.055,
+                  0.06,
+                  0.075
+              )
+
+              road_mat.metallic = 0.15
+              road_mat.roughness = 0.35
+
+              road.material_override = road_mat
+
+              add_child(road)
+
+
+              # Tymczasowa bryła samochodu.
+              # To NIE jest jeszcze Golf.
+              car = MeshInstance3D.new()
+
+              var car_mesh := BoxMesh.new()
+
+              car_mesh.size = Vector3(
+                  1.8,
+                  0.75,
+                  4.15
+              )
+
+              car.mesh = car_mesh
+
+              car.position = Vector3(
+                  0.0,
+                  0.42,
+                  0.0
+              )
+
+              var car_mat := StandardMaterial3D.new()
+
+              car_mat.albedo_color = Color(
+                  0.72,
+                  0.025,
+                  0.035
+              )
+
+              car_mat.metallic = 0.55
+              car_mat.roughness = 0.22
+
+              car.material_override = car_mat
+
+              add_child(car)
+
+
+              # Kabina
+              var cabin := MeshInstance3D.new()
+
+              var cabin_mesh := BoxMesh.new()
+
+              cabin_mesh.size = Vector3(
+                  1.45,
+                  0.62,
+                  1.85
+              )
+
+              cabin.mesh = cabin_mesh
+
+              cabin.position = Vector3(
+                  0.0,
+                  1.02,
+                  0.18
+              )
+
+              var glass := StandardMaterial3D.new()
+
+              glass.albedo_color = Color(
+                  0.025,
+                  0.045,
+                  0.075
+              )
+
+              glass.metallic = 0.15
+              glass.roughness = 0.12
+
+              cabin.material_override = glass
+
+              add_child(cabin)
+
+
+          func _build_ui() -> void:
+
+              var layer := CanvasLayer.new()
+
+              add_child(layer)
+
+
+              var title := Label.new()
+
+              title.text = "NIGHT GARAGE"
+
+              title.position = Vector2(
+                  34,
+                  28
+              )
+
+              title.add_theme_font_size_override(
+                  "font_size",
+                  34
+              )
+
+              layer.add_child(title)
+
+
+              var version := Label.new()
+
+              version.text = "v0.1.0  •  GODOT ANDROID SMOKE TEST"
+
+              version.position = Vector2(
+                  36,
+                  72
+              )
+
+              version.modulate = Color(
+                  0.55,
+                  0.85,
+                  1.0
+              )
+
+              version.add_theme_font_size_override(
+                  "font_size",
+                  18
+              )
+
+              layer.add_child(version)
+
+
+              var info := Label.new()
+
+              info.text = "Jeśli widzisz ten ekran, nowy silnik działa poprawnie."
+
+              info.position = Vector2(
+                  36,
+                  650
+              )
+
+              info.add_theme_font_size_override(
+                  "font_size",
+                  18
+              )
+
+              layer.add_child(info)
+          EOF
+
+          cat > game/export_presets.cfg <<'EOF'
+          [preset.0]
+
+          name="Android"
+          platform="Android"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path="build/NightGarage-v0.1.0.apk"
+          patches=PackedStringArray()
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          seed=0
+          encrypt_pck=false
+          encrypt_directory=false
+          script_export_mode=2
+
+
+          [preset.0.options]
+
+          custom_template/debug=""
+          custom_template/release=""
+
+          gradle_build/use_gradle_build=false
+          gradle_build/gradle_build_directory=""
+          gradle_build/android_source_template=""
+          gradle_build/compress_native_libraries=false
+          gradle_build/export_format=0
+
+          gradle_build/min_sdk=""
+          gradle_build/target_sdk=""
+
+          architectures/armeabi-v7a=false
+          architectures/arm64-v8a=true
+          architectures/x86=false
+          architectures/x86_64=false
+
+          version/code=1
+          version/name="0.1.0"
+
+          package/unique_name="com.nightgarage.game"
+          package/name="Night Garage"
+          package/signed=true
+
+          package/app_category=0
+          package/retain_data_on_uninstall=false
+          package/exclude_from_recents=false
+          package/show_in_android_tv=false
+          package/show_in_app_library=true
+          package/show_as_launcher_app=false
+
+          launcher_icons/main_192x192=""
+          launcher_icons/adaptive_foreground_432x432=""
+          launcher_icons/adaptive_background_432x432=""
+          launcher_icons/adaptive_monochrome_432x432=""
+
+          graphics/opengl_debug=false
+
+          shader_baker/enabled=false
+
+          xr_features/xr_mode=0
+
+          gesture/swipe_to_dismiss=false
+
+          screen/immersive_mode=true
+          screen/edge_to_edge=true
+
+          screen/support_small=true
+          screen/support_normal=true
+          screen/support_large=true
+          screen/support_xlarge=true
+
+          user_data_backup/allow=false
+
+          command_line/extra_args=""
+
+          apk_expansion/enable=false
+
+          permissions/custom_permissions=PackedStringArray()
+          EOF
+
+          echo "===== NIGHT GARAGE PROJECT ====="
+          cat game/project.godot
+
+          echo "===== ANDROID EXPORT PRESET ====="
+          cat game/export_presets.cfg
+
+      - name: Import and validate project
+        shell: bash
+        run: |
+          godot \
+            --headless \
+            --path game \
+            --editor \
+            --quit \
+            --verbose
+
+      - name: Export Night Garage APK
+        shell: bash
+        run: |
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PATH="$HOME/.android/debug.keystore"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_USER="androiddebugkey"
+          export GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD="android"
+
+          godot \
+            --headless \
+            --path game \
+            --export-debug \
+            "Android" \
+            "build/NightGarage-v0.1.0.apk" \
+            --verbose
+
+          test -f game/build/NightGarage-v0.1.0.apk
+
+          echo "==============================="
+          echo "NIGHT GARAGE APK CREATED"
+          echo "==============================="
+
+          ls -lh \
+            game/build/NightGarage-v0.1.0.apk
+
+      - name: Upload Night Garage APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NightGarage-v0.1.0-APK
+          path: game/build/NightGarage-v0.1.0.apk
+          if-no-files-found: error
+          retention-days: 14

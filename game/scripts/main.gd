@@ -57,6 +57,7 @@ var last_screen := -1
 var finish_camera_transform: Transform3D = Transform3D.IDENTITY
 var finish_camera_locked := false
 var camera_gap_shift_z: float = 0.0
+var material_cache: Dictionary = {}
 
 
 func _ready() -> void:
@@ -129,119 +130,129 @@ func _build_world() -> void:
 
 
 func _build_drag_strip_environment() -> void:
-    # Base terrain around the strip.
-    _add_box(
-        Vector3(0.0, -0.46, -250.0),
-        Vector3(92.0, 0.90, 560.0),
-        Color(0.022, 0.026, 0.035),
-        0.12,
-        0.96
+    var shoulder_material := _get_cached_pbr_material(
+        "road_shoulder",
+        "res://assets/pbr/road/asphalt_albedo.png",
+        "res://assets/pbr/road/asphalt_normal.png",
+        "res://assets/pbr/road/asphalt_roughness.png",
+        Vector3(18.0, 1.0, 175.0),
+        Color(0.68, 0.69, 0.72),
+        0.02,
+        0.94
+    )
+    var road_material := _get_cached_pbr_material(
+        "road_main",
+        "res://assets/pbr/road/asphalt_albedo.png",
+        "res://assets/pbr/road/asphalt_normal.png",
+        "res://assets/pbr/road/asphalt_roughness.png",
+        Vector3(10.0, 1.0, 145.0),
+        Color(0.94, 0.94, 0.97),
+        0.02,
+        0.86
+    )
+    var lane_material := _get_cached_pbr_material(
+        "road_lane_gloss",
+        "res://assets/pbr/road/asphalt_wet_albedo.png",
+        "res://assets/pbr/road/asphalt_normal.png",
+        "res://assets/pbr/road/asphalt_wet_roughness.png",
+        Vector3(4.0, 1.0, 120.0),
+        Color(0.95, 0.95, 1.0),
+        0.04,
+        0.42
+    )
+    var launch_material := _get_cached_pbr_material(
+        "road_launch_box",
+        "res://assets/pbr/road/asphalt_wet_albedo.png",
+        "res://assets/pbr/road/asphalt_normal.png",
+        "res://assets/pbr/road/asphalt_wet_roughness.png",
+        Vector3(3.0, 1.0, 18.0),
+        Color(0.98, 0.98, 1.0),
+        0.04,
+        0.36
+    )
+    var concrete_material := _get_cached_pbr_material(
+        "track_concrete",
+        "res://assets/pbr/road/concrete_albedo.png",
+        "res://assets/pbr/road/concrete_normal.png",
+        "res://assets/pbr/road/concrete_roughness.png",
+        Vector3(8.0, 1.0, 150.0),
+        Color(0.95, 0.95, 0.98),
+        0.0,
+        0.88
     )
 
-    # Wide roadside aprons.
+    # Dark foundation around the whole scene.
     _add_box(
-        Vector3(-14.6, -0.12, -245.0),
-        Vector3(16.0, 0.20, 520.0),
-        Color(0.050, 0.052, 0.060),
-        0.14,
-        0.72
-    )
-    _add_box(
-        Vector3(14.6, -0.12, -245.0),
-        Vector3(16.0, 0.20, 520.0),
-        Color(0.050, 0.052, 0.060),
-        0.14,
-        0.72
+        Vector3(0.0, -0.50, -250.0),
+        Vector3(92.0, 1.0, 560.0),
+        Color(0.018, 0.020, 0.026),
+        0.10,
+        0.98
     )
 
-    # Main drag strip and shoulders.
-    _add_box(
-        Vector3(0.0, -0.09, -245.0),
-        Vector3(16.8, 0.18, 520.0),
-        Color(0.055, 0.058, 0.072),
-        0.24,
-        0.30
-    )
-    _add_box(
-        Vector3(0.0, -0.03, -245.0),
-        Vector3(12.5, 0.05, 518.0),
-        Color(0.038, 0.042, 0.050),
-        0.20,
-        0.16
-    )
+    # Asphalt shoulders and main strip.
+    _add_plane(Vector3(0.0, -0.035, -245.0), Vector2(32.0, 520.0), shoulder_material)
+    _add_plane(Vector3(0.0, -0.018, -245.0), Vector2(16.8, 520.0), road_material)
+    _add_plane(Vector3(0.0, -0.010, -245.0), Vector2(12.6, 518.0), road_material)
 
-    # Slightly glossier racing lanes, inspired by polished/wet CSR-like roads.
+    # Polished drag lanes / groove areas.
     for lane_x in [-1.70, 1.70]:
-        _add_box(
-            Vector3(lane_x, -0.004, -220.0),
-            Vector3(2.0, 0.012, 455.0),
-            Color(0.072, 0.076, 0.090),
-            0.42,
-            0.06
-        )
-        _add_box(
-            Vector3(lane_x, 0.004, -38.0),
-            Vector3(2.2, 0.012, 66.0),
-            Color(0.085, 0.088, 0.100),
-            0.48,
-            0.04
-        )
+        _add_plane(Vector3(lane_x, -0.006, -222.0), Vector2(2.30, 456.0), lane_material)
+        _add_plane(Vector3(lane_x, -0.004, -36.0), Vector2(2.55, 68.0), launch_material)
+        _add_plane(Vector3(lane_x, -0.003, -182.0), Vector2(1.60, 160.0), lane_material)
 
-    # Outer white lines.
+    # Damp edge sheen near the outer walls.
+    _add_plane(Vector3(-4.95, -0.008, -245.0), Vector2(1.00, 510.0), lane_material)
+    _add_plane(Vector3(4.95, -0.008, -245.0), Vector2(1.00, 510.0), lane_material)
+
+    # Launch pad / burnout texture variation.
+    _add_plane(Vector3(0.0, -0.002, -18.0), Vector2(11.6, 34.0), launch_material)
+
+    # Track lines.
     _add_box(
         Vector3(-5.65, 0.014, -245.0),
         Vector3(0.10, 0.018, 515.0),
-        Color(0.92, 0.93, 0.96),
+        Color(0.93, 0.94, 0.96),
         0.0,
-        0.48
+        0.46
     )
     _add_box(
         Vector3(5.65, 0.014, -245.0),
         Vector3(0.10, 0.018, 515.0),
-        Color(0.92, 0.93, 0.96),
+        Color(0.93, 0.94, 0.96),
         0.0,
-        0.48
+        0.46
     )
 
-    # Center dashed lane divider.
     for z in range(6, 408, 12):
         _add_box(
             Vector3(0.0, 0.014, -float(z)),
             Vector3(0.09, 0.018, 4.0),
-            Color(0.96, 0.85, 0.28),
+            Color(0.96, 0.84, 0.26),
             0.0,
             0.42
         )
 
-    # Rubber seams and lane reference lines.
-    for seam_x in [-3.20, -0.95, 0.95, 3.20]:
+    # Tar seams and fine joints.
+    for seam_x in [-3.35, -1.08, 1.08, 3.35]:
         _add_box(
-            Vector3(seam_x, 0.003, -220.0),
-            Vector3(0.10, 0.010, 455.0),
-            Color(0.030, 0.030, 0.036),
-            0.10,
-            0.10
+            Vector3(seam_x, -0.001, -225.0),
+            Vector3(0.08, 0.010, 470.0),
+            Color(0.022, 0.022, 0.028),
+            0.0,
+            0.18
         )
 
-    # Start area and burnout box.
-    _add_box(
-        Vector3(0.0, -0.006, -22.0),
-        Vector3(11.7, 0.018, 44.0),
-        Color(0.066, 0.070, 0.080),
-        0.28,
-        0.10
-    )
     _add_checkered_band(-2.90, 11.6, 0.34)
     _add_checkered_band(-402.34, 11.6, 0.44)
 
-    # Staging and launch helper lines.
     _add_box(Vector3(0.0, 0.020, -1.15), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.30)
     _add_box(Vector3(0.0, 0.020, -1.95), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.30)
     _add_box(Vector3(0.0, 0.020, -5.80), Vector3(11.4, 0.015, 0.10), Color(0.90, 0.90, 0.92), 0.0, 0.35)
 
     _add_start_tree(0.0, -3.80)
     _add_finish_gantry(-402.34)
-    _build_trackside_barriers()
+    _build_trackside_barriers(concrete_material)
     _build_trackside_fences()
     _build_trackside_props()
 
@@ -305,15 +316,13 @@ func _add_finish_gantry(z: float) -> void:
         )
 
 
-func _build_trackside_barriers() -> void:
+func _build_trackside_barriers(concrete_material: Material) -> void:
     for side in [-1.0, 1.0]:
         var x: float = side * 6.55
-        _add_box(
+        _add_box_material(
             Vector3(x, 0.42, -245.0),
             Vector3(0.36, 0.82, 515.0),
-            Color(0.64, 0.66, 0.70),
-            0.06,
-            0.86
+            concrete_material
         )
         _add_box(
             Vector3(x, 0.86, -245.0),
@@ -432,7 +441,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  ROAD & STRIP", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  REALISTIC PBR ROAD", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -1261,6 +1270,63 @@ func _add_lamp(x: float, z: float) -> void:
     light.light_energy = 3.8
     light.omni_range = 12.0
     add_child(light)
+
+
+func _get_cached_pbr_material(
+    cache_key: String,
+    albedo_path: String,
+    normal_path: String,
+    roughness_path: String,
+    uv_scale: Vector3,
+    tint: Color,
+    metallic: float,
+    roughness_value: float
+) -> StandardMaterial3D:
+    if material_cache.has(cache_key):
+        return material_cache[cache_key] as StandardMaterial3D
+
+    var material := StandardMaterial3D.new()
+    material.albedo_color = tint
+    material.metallic = metallic
+    material.roughness = roughness_value
+    material.uv1_scale = uv_scale
+    material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+
+    if ResourceLoader.exists(albedo_path):
+        material.albedo_texture = load(albedo_path)
+    if ResourceLoader.exists(normal_path):
+        material.normal_enabled = true
+        material.normal_texture = load(normal_path)
+        material.normal_scale = 1.15
+    if ResourceLoader.exists(roughness_path):
+        material.roughness_texture = load(roughness_path)
+
+    material_cache[cache_key] = material
+    return material
+
+
+func _add_plane(position_value: Vector3, size_value: Vector2, material: Material) -> MeshInstance3D:
+    var mesh_instance := MeshInstance3D.new()
+    var mesh := PlaneMesh.new()
+    mesh.size = size_value
+    mesh.subdivide_width = 6
+    mesh.subdivide_depth = 6
+    mesh_instance.mesh = mesh
+    mesh_instance.position = position_value
+    mesh_instance.material_override = material
+    add_child(mesh_instance)
+    return mesh_instance
+
+
+func _add_box_material(position_value: Vector3, size_value: Vector3, material: Material) -> MeshInstance3D:
+    var mesh_instance := MeshInstance3D.new()
+    var mesh := BoxMesh.new()
+    mesh.size = size_value
+    mesh_instance.mesh = mesh
+    mesh_instance.position = position_value
+    mesh_instance.material_override = material
+    add_child(mesh_instance)
+    return mesh_instance
 
 
 func _add_box(position_value: Vector3, size_value: Vector3, color: Color, metallic: float, roughness: float) -> MeshInstance3D:

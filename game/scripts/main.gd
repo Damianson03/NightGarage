@@ -36,7 +36,9 @@ var time_label: Label
 var distance_label: Label
 var zero_to_100_label: Label
 var rpm_bar: ProgressBar
+var rpm_yellow_low_zone: ColorRect
 var rpm_green_zone: ColorRect
+var rpm_yellow_high_zone: ColorRect
 var rpm_red_zone: ColorRect
 var rpm_needle: ColorRect
 var rpm_zone_label: Label
@@ -265,15 +267,29 @@ func _build_ui() -> void:
 
     rpm_bar.modulate = Color(0.62, 0.72, 1.0, 0.42)
 
+    rpm_yellow_low_zone = ColorRect.new()
+    rpm_yellow_low_zone.color = Color(1.0, 0.72, 0.04, 0.70)
+    rpm_yellow_low_zone.position = Vector2(310.0, 625.0)
+    rpm_yellow_low_zone.size = Vector2(10.0, 32.0)
+    rpm_yellow_low_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    race_panel.add_child(rpm_yellow_low_zone)
+
     rpm_green_zone = ColorRect.new()
-    rpm_green_zone.color = Color(0.08, 0.95, 0.22, 0.72)
+    rpm_green_zone.color = Color(0.08, 0.95, 0.22, 0.78)
     rpm_green_zone.position = Vector2(310.0, 625.0)
     rpm_green_zone.size = Vector2(10.0, 32.0)
     rpm_green_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
     race_panel.add_child(rpm_green_zone)
 
+    rpm_yellow_high_zone = ColorRect.new()
+    rpm_yellow_high_zone.color = Color(1.0, 0.72, 0.04, 0.70)
+    rpm_yellow_high_zone.position = Vector2(310.0, 625.0)
+    rpm_yellow_high_zone.size = Vector2(10.0, 32.0)
+    rpm_yellow_high_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    race_panel.add_child(rpm_yellow_high_zone)
+
     rpm_red_zone = ColorRect.new()
-    rpm_red_zone.color = Color(1.0, 0.08, 0.06, 0.68)
+    rpm_red_zone.color = Color(1.0, 0.08, 0.06, 0.74)
     rpm_red_zone.position = Vector2(850.0, 625.0)
     rpm_red_zone.size = Vector2(70.0, 32.0)
     rpm_red_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -294,20 +310,20 @@ func _build_ui() -> void:
 
     gas_button = Button.new()
     gas_button.text = "GAS"
-    gas_button.position = Vector2(1060, 435)
-    gas_button.size = Vector2(170, 145)
+    gas_button.position = Vector2(1060, 350)
+    gas_button.size = Vector2(170, 130)
     gas_button.button_down.connect(_gas_down)
     gas_button.button_up.connect(_gas_up)
     race_panel.add_child(gas_button)
 
     shift_button = Button.new()
     shift_button.text = "SHIFT"
-    shift_button.position = Vector2(1060, 525)
-    shift_button.size = Vector2(170, 145)
+    shift_button.position = Vector2(1060, 535)
+    shift_button.size = Vector2(170, 140)
     shift_button.pressed.connect(_shift_pressed)
     race_panel.add_child(shift_button)
 
-    race_hint = _label("Trzymaj GAS przed startem. Puść, aby RPM powoli opadało.", Vector2(34, 675), 15)
+    race_hint = _label("Naciśnij GAS, aby rozpocząć odliczanie.", Vector2(34, 675), 15)
     race_hint.modulate = Color(0.72, 0.75, 0.82)
     race_panel.add_child(race_hint)
 
@@ -434,17 +450,35 @@ func _update_ui() -> void:
 
         if is_countdown:
             countdown_label.visible = true
-            countdown_label.text = str(maxi(1, int(ceil(minf(float(state.countdown), 3.0)))))
+
+            if state.countdown_started:
+                countdown_label.text = str(maxi(1, int(ceil(minf(float(state.countdown), 3.0)))))
+                race_hint.text = "Odliczanie trwa. ŻÓŁTA 0%  •  ZIELONA +1%  •  CZERWONA -1%"
+            else:
+                countdown_label.text = "GAS"
+                race_hint.text = "Naciśnij GAS, aby rozpocząć 3-2-1. Pierwszego odliczania nie da się zatrzymać."
         else:
             countdown_label.visible = state.race_time < 0.55
             countdown_label.text = "GO"
 
         shift_label.text = state.shift_message if state.shift_message_time > 0.0 else ""
-        shift_button.disabled = state.screen != GameState.Screen.RACING or state.shifting or state.gear >= GameState.MAX_GEARS
+        shift_button.disabled = (
+            state.screen != GameState.Screen.RACING
+            or state.race_time < 0.45
+            or state.shifting
+            or state.gear >= GameState.MAX_GEARS
+        )
 
 
 func _update_rpm_zones() -> void:
-    if rpm_green_zone == null or rpm_red_zone == null or rpm_needle == null or rpm_zone_label == null:
+    if (
+        rpm_yellow_low_zone == null
+        or rpm_green_zone == null
+        or rpm_yellow_high_zone == null
+        or rpm_red_zone == null
+        or rpm_needle == null
+        or rpm_zone_label == null
+    ):
         return
 
     var meter_x: float = 310.0
@@ -454,41 +488,54 @@ func _update_rpm_zones() -> void:
     var meter_max_rpm: float = float(rpm_bar.max_value)
     var zone_low: float = 0.0
     var zone_high: float = 0.0
+    var red_from: float = 0.0
 
     if state.screen == GameState.Screen.COUNTDOWN:
         zone_low = float(state.launch_green_low())
         zone_high = float(state.launch_green_high())
-        rpm_zone_label.text = "STREFA STARTU: %d-%d RPM" % [int(round(zone_low)), int(round(zone_high))]
+        red_from = float(state.launch_red_start())
     else:
         zone_low = float(state.green_low())
         zone_high = float(state.green_high())
-        rpm_zone_label.text = "STREFA ZMIANY: %d-%d RPM" % [int(round(zone_low)), int(round(zone_high))]
+        red_from = float(state.red_start())
 
     zone_low = clampf(zone_low, 0.0, meter_max_rpm)
     zone_high = clampf(zone_high, zone_low, meter_max_rpm)
+    red_from = clampf(red_from, zone_high, meter_max_rpm)
 
     var green_start_ratio: float = zone_low / meter_max_rpm
     var green_end_ratio: float = zone_high / meter_max_rpm
-    var green_x: float = meter_x + meter_width * green_start_ratio
-    var green_width: float = maxf(4.0, meter_width * (green_end_ratio - green_start_ratio))
-    rpm_green_zone.position = Vector2(green_x, meter_y)
-    rpm_green_zone.size = Vector2(green_width, meter_height)
+    var red_start_ratio: float = red_from / meter_max_rpm
 
-    var red_x: float = meter_x + meter_width * green_end_ratio
-    var red_width: float = maxf(4.0, (meter_x + meter_width) - red_x)
+    var green_x: float = meter_x + meter_width * green_start_ratio
+    var green_end_x: float = meter_x + meter_width * green_end_ratio
+    var red_x: float = meter_x + meter_width * red_start_ratio
+    var meter_end_x: float = meter_x + meter_width
+
+    rpm_yellow_low_zone.position = Vector2(meter_x, meter_y)
+    rpm_yellow_low_zone.size = Vector2(maxf(4.0, green_x - meter_x), meter_height)
+
+    rpm_green_zone.position = Vector2(green_x, meter_y)
+    rpm_green_zone.size = Vector2(maxf(4.0, green_end_x - green_x), meter_height)
+
+    rpm_yellow_high_zone.position = Vector2(green_end_x, meter_y)
+    rpm_yellow_high_zone.size = Vector2(maxf(4.0, red_x - green_end_x), meter_height)
+
     rpm_red_zone.position = Vector2(red_x, meter_y)
-    rpm_red_zone.size = Vector2(red_width, meter_height)
+    rpm_red_zone.size = Vector2(maxf(4.0, meter_end_x - red_x), meter_height)
 
     var rpm_ratio: float = clampf(float(state.rpm) / meter_max_rpm, 0.0, 1.0)
     var needle_x: float = meter_x + meter_width * rpm_ratio
     rpm_needle.position = Vector2(needle_x - 2.5, meter_y - 5.0)
 
+    rpm_zone_label.text = "ŻÓŁTA 0%   •   ZIELONA +1%   •   ŻÓŁTA 0%   •   CZERWONA -1%"
+
     if state.rpm >= zone_low and state.rpm <= zone_high:
         rpm_label.modulate = Color(0.20, 1.0, 0.28)
-    elif state.rpm > zone_high:
+    elif state.rpm >= red_from:
         rpm_label.modulate = Color(1.0, 0.18, 0.12)
     else:
-        rpm_label.modulate = Color(1.0, 1.0, 1.0)
+        rpm_label.modulate = Color(1.0, 0.82, 0.16)
 
 
 func _update_garage_ui() -> void:
@@ -569,6 +616,11 @@ func _gas_up() -> void:
 
 
 func _shift_pressed() -> void:
+    # Prevent the touch that was holding GAS at launch from immediately
+    # becoming a SHIFT press when the controls swap on screen.
+    if state.screen != GameState.Screen.RACING or state.race_time < 0.45:
+        return
+
     state.shift()
 
 

@@ -1,6 +1,6 @@
 extends RefCounted
 
-const GAME_VERSION := "v0.3.1"
+const GAME_VERSION := "v0.3.2"
 const SAVE_PATH := "user://night_garage_save.cfg"
 
 # Volkswagen Golf VII 1.2 TSI 85 PS / 5MT baseline.
@@ -13,6 +13,9 @@ const IDLE_RPM := 950.0
 const REV_LIMIT_RPM := 6000.0
 const SHIFT_GREEN_LOW := 5150.0
 const SHIFT_GREEN_HIGH := 5450.0
+const SHIFT_RED_START := 5750.0
+const GREEN_POWER_MULTIPLIER := 1.01
+const RED_POWER_MULTIPLIER := 0.99
 
 const FINAL_DRIVE := 4.06
 const WHEEL_RADIUS_M := 0.31725
@@ -60,6 +63,7 @@ var wins: int = 0
 var upgrades: Array[int] = [0, 0, 0, 0, 0, 0]
 
 var gas_held := false
+var countdown_started := false
 var rpm := IDLE_RPM
 var gear := 1
 var speed_kmh := 0.0
@@ -70,6 +74,7 @@ var countdown := 3.2
 var launch_quality := 0.0
 var launch_penalty := 0.0
 var launch_rpm_at_go := 4550.0
+var timing_power_multiplier := 1.0
 
 var shift_message := ""
 var shift_message_time := 0.0
@@ -198,6 +203,7 @@ func start_race(selected_mode: int) -> void:
     screen = Screen.COUNTDOWN
 
     gas_held = false
+    countdown_started = false
     rpm = IDLE_RPM
     gear = 1
     pending_gear = 1
@@ -209,6 +215,7 @@ func start_race(selected_mode: int) -> void:
     launch_quality = 0.0
     launch_penalty = 0.0
     launch_rpm_at_go = 4550.0
+    timing_power_multiplier = 1.0
 
     shift_message = ""
     shift_message_time = 0.0
@@ -245,6 +252,9 @@ func go_garage() -> void:
 func set_gas(held: bool) -> void:
     gas_held = held
 
+    if held and screen == Screen.COUNTDOWN and not countdown_started:
+        countdown_started = true
+
 
 func green_low() -> float:
     return SHIFT_GREEN_LOW
@@ -252,6 +262,10 @@ func green_low() -> float:
 
 func green_high() -> float:
     return SHIFT_GREEN_HIGH
+
+
+func red_start() -> float:
+    return SHIFT_RED_START
 
 
 func launch_green_low() -> float:
@@ -262,34 +276,30 @@ func launch_green_high() -> float:
     return 5050.0 + float(upgrades[4]) * 55.0
 
 
+func launch_red_start() -> float:
+    return minf(REV_LIMIT_RPM, launch_green_high() + 600.0)
+
+
 func shift() -> void:
     if screen != Screen.RACING:
         return
     if player_finished or shifting or gear >= MAX_GEARS:
         return
 
-    var center := (SHIFT_GREEN_LOW + SHIFT_GREEN_HIGH) * 0.5
-    var half_width := (SHIFT_GREEN_HIGH - SHIFT_GREEN_LOW) * 0.5
-    var diff: float = absf(rpm - center)
-    var extra_delay := 0.0
-
-    if diff <= half_width * 0.35:
-        shift_message = "PERFECT SHIFT"
-        extra_delay = 0.0
-    elif diff <= half_width:
-        shift_message = "GOOD SHIFT"
-        extra_delay = 0.03
-    elif rpm < SHIFT_GREEN_LOW:
-        shift_message = "ZA WCZEŚNIE"
-        extra_delay = 0.12
+    if rpm >= SHIFT_GREEN_LOW and rpm <= SHIFT_GREEN_HIGH:
+        timing_power_multiplier = GREEN_POWER_MULTIPLIER
+        shift_message = "ZIELONY SHIFT  +1% MOCY"
+    elif rpm >= SHIFT_RED_START:
+        timing_power_multiplier = RED_POWER_MULTIPLIER
+        shift_message = "CZERWONY SHIFT  -1% MOCY"
     else:
-        shift_message = "ZA PÓŹNO"
-        extra_delay = 0.15
+        timing_power_multiplier = 1.0
+        shift_message = "ŻÓŁTY SHIFT"
 
     shift_message_time = 0.8
     shifting = true
     pending_gear = gear + 1
-    active_shift_duration = shift_duration() + extra_delay
+    active_shift_duration = shift_duration()
     shift_timer = active_shift_duration
     shift_start_rpm = rpm
 
@@ -333,29 +343,36 @@ func _update_countdown(dt: float) -> void:
         rpm -= fall_rate * dt
 
     rpm = clampf(rpm, IDLE_RPM, REV_LIMIT_RPM + 140.0)
+
+    # The first GAS press starts the countdown permanently. Releasing GAS
+    # can still lower RPM, but it never pauses or resets 3-2-1.
+    if not countdown_started:
+        return
+
     countdown -= dt
 
     if countdown > 0.0:
         return
 
-    var lo := launch_green_low()
-    var hi := launch_green_high()
-    var center := (lo + hi) * 0.5
-    var half_width := (hi - lo) * 0.5
-    var diff: float = absf(rpm - center)
+    var lo: float = launch_green_low()
+    var hi: float = launch_green_high()
+    var red_from: float = launch_red_start()
 
-    launch_quality = clampf(1.0 - diff / (half_width * 2.0), 0.0, 1.0)
-    launch_penalty = (1.0 - launch_quality) * 0.30
     launch_rpm_at_go = rpm
+    launch_penalty = 0.0
 
-    if diff <= half_width * 0.35:
-        shift_message = "PERFECT START"
-    elif rpm >= lo and rpm <= hi:
-        shift_message = "GOOD START"
-    elif launch_quality > 0.45:
-        shift_message = "OK START"
+    if rpm >= lo and rpm <= hi:
+        launch_quality = 1.0
+        timing_power_multiplier = GREEN_POWER_MULTIPLIER
+        shift_message = "ZIELONY START  +1% MOCY"
+    elif rpm >= red_from:
+        launch_quality = 0.0
+        timing_power_multiplier = RED_POWER_MULTIPLIER
+        shift_message = "CZERWONY START  -1% MOCY"
     else:
-        shift_message = "SŁABY START"
+        launch_quality = 0.5
+        timing_power_multiplier = 1.0
+        shift_message = "ŻÓŁTY START"
 
     shift_message_time = 1.0
     screen = Screen.RACING
@@ -385,7 +402,7 @@ func _update_player_physics(dt: float) -> void:
         rpm = calculate_engine_rpm()
 
         var torque := engine_torque_nm(rpm)
-        torque *= horsepower() / BASE_HP
+        torque *= (horsepower() / BASE_HP) * timing_power_multiplier
 
         drive_force = (
             torque

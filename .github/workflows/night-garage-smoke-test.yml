@@ -1,4 +1,4 @@
-name: Night Garage v0.3.2 - Timing Zones SDK Hotfix
+name: Night Garage v0.3.3 - Finish Flow
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
-      - 'NightGarage-v0.3.2-TimingZones-source.zip'
+      - 'NightGarage-v0.3.3-FinishFlow-source.zip'
 
 permissions:
   contents: write
@@ -24,17 +24,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Night Garage v0.3.2 source
+      - name: Install Night Garage v0.3.3 source
         shell: bash
         run: |
-          test -f NightGarage-v0.3.2-TimingZones-source.zip
+          test -f NightGarage-v0.3.3-FinishFlow-source.zip
 
-          unzip -t NightGarage-v0.3.2-TimingZones-source.zip
+          unzip -t NightGarage-v0.3.3-FinishFlow-source.zip
 
           rm -rf game
 
           unzip -q \
-            NightGarage-v0.3.2-TimingZones-source.zip \
+            NightGarage-v0.3.3-FinishFlow-source.zip \
             -d .
 
           test -f game/project.godot
@@ -45,17 +45,15 @@ jobs:
           test -f game/android/nightgarage-debug.keystore
           test -f game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
 
-          echo "Night Garage v0.3.2 source installed correctly."
+          echo "Night Garage v0.3.3 source installed correctly."
 
           grep -n "GAME_VERSION" game/scripts/game_state.gd
-          grep -n "countdown_started" game/scripts/game_state.gd | head
-          grep -n "GREEN_POWER_MULTIPLIER" game/scripts/game_state.gd
-          grep -n "RED_POWER_MULTIPLIER" game/scripts/game_state.gd
-          grep -n "rpm_yellow_low_zone" game/scripts/main.gd | head
-          grep -n "rpm_yellow_high_zone" game/scripts/main.gd | head
-          grep -n "gas_button.position" game/scripts/main.gd
+          grep -n "POST_FINISH_DRIVE_SECONDS" game/scripts/game_state.gd
+          grep -n "_update_post_finish_drive" game/scripts/game_state.gd
+          grep -n "finish_camera_locked" game/scripts/main.gd | head
+          grep -n "version/name" game/export_presets.cfg
 
-      - name: Commit v0.3.2 source
+      - name: Commit v0.3.3 source
         shell: bash
         run: |
           git config user.name "github-actions"
@@ -64,9 +62,9 @@ jobs:
           git add game
 
           if git diff --cached --quiet; then
-            echo "v0.3.2 source already matches repository."
+            echo "v0.3.3 source already matches repository."
           else
-            git commit -m "Add timing zones and gas-start countdown v0.3.2 [skip ci]"
+            git commit -m "Improve finish flow v0.3.3 [skip ci]"
             git push
           fi
 
@@ -97,9 +95,6 @@ jobs:
             "build-tools;35.0.1" \
             "platforms;android-35"
 
-          echo "Installed Android packages:"
-          sdkmanager --list_installed
-
       - name: Download Godot
         shell: bash
         run: |
@@ -108,27 +103,13 @@ jobs:
             -O /tmp/godot.zip
 
           mkdir -p /tmp/godot
+          unzip -q /tmp/godot.zip -d /tmp/godot
 
-          unzip -q \
-            /tmp/godot.zip \
-            -d /tmp/godot
-
-          GODOT_BIN="$(
-            find \
-              /tmp/godot \
-              -maxdepth 1 \
-              -type f \
-              -name 'Godot_v*_linux.x86_64' \
-              | head -n 1
-          )"
+          GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
 
           test -n "$GODOT_BIN"
-
           chmod +x "$GODOT_BIN"
-
-          sudo ln -sf \
-            "$GODOT_BIN" \
-            /usr/local/bin/godot
+          sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
 
           godot --version
 
@@ -142,17 +123,11 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
 
           mkdir -p "$TEMPLATE_DIR"
-
           rm -rf /tmp/templates_unpack
           mkdir -p /tmp/templates_unpack
 
-          unzip -q \
-            /tmp/templates.tpz \
-            -d /tmp/templates_unpack
-
-          cp -a \
-            /tmp/templates_unpack/templates/. \
-            "$TEMPLATE_DIR/"
+          unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
+          cp -a /tmp/templates_unpack/templates/. "$TEMPLATE_DIR/"
 
       - name: Configure Godot Android paths
         shell: bash
@@ -198,13 +173,12 @@ jobs:
             2>&1 | tee /tmp/nightgarage-runtime.log
 
           GODOT_EXIT=${PIPESTATUS[0]}
-
           set -e
 
           if grep -Eiq \
             'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
-            /tmp/nightgarage-runtime.log
-          then
+            /tmp/nightgarage-runtime.log; then
+
             echo "Runtime/script error detected:"
 
             grep -Ein \
@@ -221,7 +195,7 @@ jobs:
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.3.2 APK
+      - name: Export Night Garage v0.3.3 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -235,21 +209,18 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.3.2.apk" \
+            "build/NightGarage-v0.3.3.apk" \
             --verbose
 
-          test -f \
-            game/build/NightGarage-v0.3.2.apk
+          test -f game/build/NightGarage-v0.3.3.apk
 
-          echo "Night Garage v0.3.2 APK created:"
+          echo "Night Garage v0.3.3 APK created:"
+          ls -lh game/build/NightGarage-v0.3.3.apk
 
-          ls -lh \
-            game/build/NightGarage-v0.3.2.apk
-
-      - name: Upload Night Garage v0.3.2 APK
+      - name: Upload Night Garage v0.3.3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.3.2-TimingZones
-          path: game/build/NightGarage-v0.3.2.apk
+          name: NightGarage-v0.3.3-FinishFlow
+          path: game/build/NightGarage-v0.3.3.apk
           if-no-files-found: error
           retention-days: 14

@@ -1,4 +1,4 @@
-name: Night Garage v0.4.1 - Realistic PBR Road
+name: Night Garage v0.4.2 - Real Asphalt 02
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
-      - 'NightGarage-v0.4.1-RealisticPBRRoad-source.zip'
+      - 'NightGarage-v0.4.2-RealAsphalt02-source.zip'
 
 permissions:
   contents: write
@@ -24,17 +24,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Night Garage v0.4.1 source
+      - name: Install Night Garage v0.4.2 source
         shell: bash
         run: |
-          test -f NightGarage-v0.4.1-RealisticPBRRoad-source.zip
+          test -f NightGarage-v0.4.2-RealAsphalt02-source.zip
 
-          unzip -t NightGarage-v0.4.1-RealisticPBRRoad-source.zip
+          unzip -t NightGarage-v0.4.2-RealAsphalt02-source.zip
 
           rm -rf game
 
           unzip -q \
-            NightGarage-v0.4.1-RealisticPBRRoad-source.zip \
+            NightGarage-v0.4.2-RealAsphalt02-source.zip \
             -d .
 
           test -f game/project.godot
@@ -44,21 +44,19 @@ jobs:
           test -f game/scripts/game_state.gd
           test -f game/android/nightgarage-debug.keystore
           test -f game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
-          test -f game/assets/pbr/road/asphalt_albedo.png
-          test -f game/assets/pbr/road/asphalt_normal.png
-          test -f game/assets/pbr/road/asphalt_roughness.png
-          test -f game/assets/pbr/road/asphalt_wet_albedo.png
-          test -f game/assets/pbr/road/concrete_albedo.png
+          test -f game/assets/pbr/road_real/asphalt_02_diff_1k.jpg
+          test -f game/assets/pbr/road_real/asphalt_02_nor_gl_1k.png
+          test -f game/assets/pbr/road_real/asphalt_02_rough_1k.png
+          test -f game/assets/pbr/road_real/asphalt_02_ao_1k.jpg
 
-          echo "Night Garage v0.4.1 source installed correctly."
+          echo "Night Garage v0.4.2 source installed correctly."
 
           grep -n "GAME_VERSION" game/scripts/game_state.gd
+          grep -n "road_real" game/scripts/main.gd | head
           grep -n "_get_cached_pbr_material" game/scripts/main.gd
-          grep -n "_add_plane" game/scripts/main.gd | head
-          grep -n "assets/pbr/road" game/scripts/main.gd | head
           grep -n "version/name" game/export_presets.cfg
 
-      - name: Commit v0.4.1 source
+      - name: Commit v0.4.2 source
         shell: bash
         run: |
           git config user.name "github-actions"
@@ -67,9 +65,9 @@ jobs:
           git add game
 
           if git diff --cached --quiet; then
-            echo "v0.4.1 source already matches repository."
+            echo "v0.4.2 source already matches repository."
           else
-            git commit -m "Add realistic PBR road materials v0.4.1 [skip ci]"
+            git commit -m "Use real Asphalt 02 texture set v0.4.2 [skip ci]"
             git push
           fi
 
@@ -200,7 +198,7 @@ jobs:
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.4.1 APK
+      - name: Export Night Garage v0.4.2 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -214,18 +212,18 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.4.1.apk" \
+            "build/NightGarage-v0.4.2.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.4.1.apk
+          test -f game/build/NightGarage-v0.4.2.apk
 
-          echo "Night Garage v0.4.1 APK created:"
-          ls -lh game/build/NightGarage-v0.4.1.apk
+          echo "Night Garage v0.4.2 APK created:"
+          ls -lh game/build/NightGarage-v0.4.2.apk
 
-      - name: Upload Night Garage v0.4.1 APK
+      - name: Upload Night Garage v0.4.2 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.4.1-RealisticPBRRoad
-          path: game/build/NightGarage-v0.4.1.apk
+          name: NightGarage-v0.4.2-RealAsphalt02
+          path: game/build/NightGarage-v0.4.2.apk
           if-no-files-found: error
           retention-days: 14

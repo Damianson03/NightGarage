@@ -136,7 +136,7 @@ func _build_drag_strip_environment() -> void:
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
         "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
         "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(10.0, 1.0, 125.0),
+        Vector3(8.0, 130.0, 1.0),
         Color(0.82, 0.82, 0.84),
         0.01,
         0.95,
@@ -148,7 +148,7 @@ func _build_drag_strip_environment() -> void:
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
         "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
         "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(7.0, 1.0, 110.0),
+        Vector3(4.2, 130.0, 1.0),
         Color(0.98, 0.98, 1.0),
         0.01,
         0.82,
@@ -160,7 +160,7 @@ func _build_drag_strip_environment() -> void:
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
         "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
         "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(3.4, 1.0, 92.0),
+        Vector3(1.0, 114.0, 1.0),
         Color(0.78, 0.80, 0.88),
         0.03,
         0.26,
@@ -172,7 +172,7 @@ func _build_drag_strip_environment() -> void:
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
         "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
         "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(2.4, 1.0, 14.0),
+        Vector3(3.0, 17.0, 1.0),
         Color(0.72, 0.74, 0.82),
         0.03,
         0.22,
@@ -184,7 +184,7 @@ func _build_drag_strip_environment() -> void:
         "res://assets/pbr/road/concrete_normal.png",
         "res://assets/pbr/road/concrete_roughness.png",
         "",
-        Vector3(8.0, 1.0, 150.0),
+        Vector3(2.0, 120.0, 1.0),
         Color(0.95, 0.95, 0.98),
         0.0,
         0.88,
@@ -451,7 +451,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  REAL ASPHALT 02", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  REAL ASPHALT UV FIX", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -1303,6 +1303,7 @@ func _get_cached_pbr_material(
     material.roughness = roughness_value
     material.uv1_scale = uv_scale
     material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+    material.texture_repeat = true
 
     if ResourceLoader.exists(albedo_path):
         material.albedo_texture = load(albedo_path)

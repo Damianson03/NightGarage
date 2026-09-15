@@ -1,4 +1,4 @@
-name: Night Garage v0.3.2 - Timing Zones
+name: Night Garage v0.3.2 - Timing Zones SDK Hotfix
 
 on:
   workflow_dispatch:
@@ -77,17 +77,28 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '14742923'
+          packages: ''
 
       - name: Install Android packages
         shell: bash
         run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          sdkmanager --version
+
           yes | sdkmanager --licenses >/dev/null || true
 
           sdkmanager \
             "platform-tools" \
             "build-tools;35.0.1" \
             "platforms;android-35"
+
+          echo "Installed Android packages:"
+          sdkmanager --list_installed
 
       - name: Download Godot
         shell: bash
@@ -97,12 +108,27 @@ jobs:
             -O /tmp/godot.zip
 
           mkdir -p /tmp/godot
-          unzip -q /tmp/godot.zip -d /tmp/godot
 
-          GODOT_BIN="$(find /tmp/godot -maxdepth 1 -type f -name 'Godot_v*_linux.x86_64' | head -n 1)"
+          unzip -q \
+            /tmp/godot.zip \
+            -d /tmp/godot
+
+          GODOT_BIN="$(
+            find \
+              /tmp/godot \
+              -maxdepth 1 \
+              -type f \
+              -name 'Godot_v*_linux.x86_64' \
+              | head -n 1
+          )"
+
+          test -n "$GODOT_BIN"
 
           chmod +x "$GODOT_BIN"
-          sudo ln -sf "$GODOT_BIN" /usr/local/bin/godot
+
+          sudo ln -sf \
+            "$GODOT_BIN" \
+            /usr/local/bin/godot
 
           godot --version
 
@@ -116,11 +142,17 @@ jobs:
           TEMPLATE_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
 
           mkdir -p "$TEMPLATE_DIR"
+
           rm -rf /tmp/templates_unpack
           mkdir -p /tmp/templates_unpack
 
-          unzip -q /tmp/templates.tpz -d /tmp/templates_unpack
-          cp -a /tmp/templates_unpack/templates/. "$TEMPLATE_DIR/"
+          unzip -q \
+            /tmp/templates.tpz \
+            -d /tmp/templates_unpack
+
+          cp -a \
+            /tmp/templates_unpack/templates/. \
+            "$TEMPLATE_DIR/"
 
       - name: Configure Godot Android paths
         shell: bash
@@ -128,7 +160,9 @@ jobs:
           mkdir -p "$HOME/.config/godot"
 
           KEYSTORE_PATH="$GITHUB_WORKSPACE/game/android/nightgarage-debug.keystore"
+
           test -f "$KEYSTORE_PATH"
+          test -d "$ANDROID_HOME"
 
           cat > "$HOME/.config/godot/editor_settings-4.6.tres" <<EOF
           [gd_resource type="EditorSettings" format=3]
@@ -164,12 +198,13 @@ jobs:
             2>&1 | tee /tmp/nightgarage-runtime.log
 
           GODOT_EXIT=${PIPESTATUS[0]}
+
           set -e
 
           if grep -Eiq \
             'SCRIPT ERROR|Parse Error|Compile Error|Invalid call|Invalid access|Invalid set index|Cannot assign|Attempt to call|Warning treated as error' \
-            /tmp/nightgarage-runtime.log; then
-
+            /tmp/nightgarage-runtime.log
+          then
             echo "Runtime/script error detected:"
 
             grep -Ein \
@@ -203,10 +238,13 @@ jobs:
             "build/NightGarage-v0.3.2.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.3.2.apk
+          test -f \
+            game/build/NightGarage-v0.3.2.apk
 
           echo "Night Garage v0.3.2 APK created:"
-          ls -lh game/build/NightGarage-v0.3.2.apk
+
+          ls -lh \
+            game/build/NightGarage-v0.3.2.apk
 
       - name: Upload Night Garage v0.3.2 APK
         uses: actions/upload-artifact@v4

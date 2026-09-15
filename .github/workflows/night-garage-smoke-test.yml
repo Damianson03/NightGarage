@@ -1,4 +1,4 @@
-name: Night Garage v0.3.3 - Finish Flow
+name: Night Garage v0.3.4 - Dynamic Camera Progress
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - '.github/workflows/night-garage-smoke-test.yml'
-      - 'NightGarage-v0.3.3-FinishFlow-source.zip'
+      - 'NightGarage-v0.3.4-DynamicCameraProgress-source.zip'
 
 permissions:
   contents: write
@@ -24,17 +24,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Night Garage v0.3.3 source
+      - name: Install Night Garage v0.3.4 source
         shell: bash
         run: |
-          test -f NightGarage-v0.3.3-FinishFlow-source.zip
+          test -f NightGarage-v0.3.4-DynamicCameraProgress-source.zip
 
-          unzip -t NightGarage-v0.3.3-FinishFlow-source.zip
+          unzip -t NightGarage-v0.3.4-DynamicCameraProgress-source.zip
 
           rm -rf game
 
           unzip -q \
-            NightGarage-v0.3.3-FinishFlow-source.zip \
+            NightGarage-v0.3.4-DynamicCameraProgress-source.zip \
             -d .
 
           test -f game/project.godot
@@ -45,15 +45,15 @@ jobs:
           test -f game/android/nightgarage-debug.keystore
           test -f game/assets/cars/2014_volkswagen_golf_gti_mk7.glb
 
-          echo "Night Garage v0.3.3 source installed correctly."
+          echo "Night Garage v0.3.4 source installed correctly."
 
           grep -n "GAME_VERSION" game/scripts/game_state.gd
-          grep -n "POST_FINISH_DRIVE_SECONDS" game/scripts/game_state.gd
-          grep -n "_update_post_finish_drive" game/scripts/game_state.gd
-          grep -n "finish_camera_locked" game/scripts/main.gd | head
+          grep -n "camera_gap_shift_z" game/scripts/main.gd | head
+          grep -n "_update_race_progress" game/scripts/main.gd
+          grep -n "player_progress_marker" game/scripts/main.gd | head
           grep -n "version/name" game/export_presets.cfg
 
-      - name: Commit v0.3.3 source
+      - name: Commit v0.3.4 source
         shell: bash
         run: |
           git config user.name "github-actions"
@@ -62,9 +62,9 @@ jobs:
           git add game
 
           if git diff --cached --quiet; then
-            echo "v0.3.3 source already matches repository."
+            echo "v0.3.4 source already matches repository."
           else
-            git commit -m "Improve finish flow v0.3.3 [skip ci]"
+            git commit -m "Add dynamic race camera and progress bar v0.3.4 [skip ci]"
             git push
           fi
 
@@ -195,7 +195,7 @@ jobs:
 
           echo "Runtime smoke test passed."
 
-      - name: Export Night Garage v0.3.3 APK
+      - name: Export Night Garage v0.3.4 APK
         shell: bash
         run: |
           mkdir -p game/build
@@ -209,18 +209,18 @@ jobs:
             --path game \
             --export-debug \
             "Android" \
-            "build/NightGarage-v0.3.3.apk" \
+            "build/NightGarage-v0.3.4.apk" \
             --verbose
 
-          test -f game/build/NightGarage-v0.3.3.apk
+          test -f game/build/NightGarage-v0.3.4.apk
 
-          echo "Night Garage v0.3.3 APK created:"
-          ls -lh game/build/NightGarage-v0.3.3.apk
+          echo "Night Garage v0.3.4 APK created:"
+          ls -lh game/build/NightGarage-v0.3.4.apk
 
-      - name: Upload Night Garage v0.3.3 APK
+      - name: Upload Night Garage v0.3.4 APK
         uses: actions/upload-artifact@v4
         with:
-          name: NightGarage-v0.3.3-FinishFlow
-          path: game/build/NightGarage-v0.3.3.apk
+          name: NightGarage-v0.3.4-DynamicCameraProgress
+          path: game/build/NightGarage-v0.3.4.apk
           if-no-files-found: error
           retention-days: 14

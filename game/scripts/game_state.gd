@@ -1,6 +1,6 @@
 extends RefCounted
 
-const GAME_VERSION := "v0.3.2"
+const GAME_VERSION := "v0.3.3"
 const SAVE_PATH := "user://night_garage_save.cfg"
 
 # Volkswagen Golf VII 1.2 TSI 85 PS / 5MT baseline.
@@ -27,6 +27,7 @@ const GRAVITY := 9.81
 const FIRST_GEAR_TRACTION := 0.56
 const SECOND_GEAR_TRACTION := 0.32
 const RACE_DISTANCE_M := 402.336
+const POST_FINISH_DRIVE_SECONDS := 4.0
 
 const GEAR_RATIOS: Array[float] = [3.77, 1.96, 1.28, 0.88, 0.67]
 const MAX_GEARS := 5
@@ -88,6 +89,7 @@ var player_finished := false
 var opponent_finished := false
 var player_finish_time := 0.0
 var opponent_finish_time := 0.0
+var post_finish_drive_time := 0.0
 var zero_to_100_time := -1.0
 var max_speed_seen := 0.0
 
@@ -228,6 +230,7 @@ func start_race(selected_mode: int) -> void:
     opponent_finished = false
     player_finish_time = 0.0
     opponent_finish_time = 0.0
+    post_finish_drive_time = 0.0
     zero_to_100_time = -1.0
     max_speed_seen = 0.0
     last_reward = 0
@@ -314,23 +317,40 @@ func update(delta: float) -> void:
         _update_countdown(dt)
         return
 
+    # The result overlay is allowed to appear while both cars keep rolling
+    # beyond the finish line. After a few seconds they are already outside
+    # the frozen finish-line camera, so the simulation can stop safely.
+    if screen == Screen.RESULT:
+        _update_post_finish_drive(dt)
+        return
+
     if screen != Screen.RACING:
         return
 
     race_time += dt
 
-    if not player_finished:
-        _update_player_physics(dt)
+    # Both cars keep moving even after one of them has crossed the line.
+    # This is especially important when the rival wins first: the player
+    # still gets to complete the full 1/4 mile instead of ending instantly.
+    _update_player_physics(dt)
+    _update_opponent(dt)
 
-    if not opponent_finished:
-        _update_opponent(dt)
+    # The result is shown only when the PLAYER reaches the finish line.
+    # If the rival arrived earlier this becomes a loss; if the rival has not
+    # finished yet, the player has already secured the win.
+    if player_finished:
+        _finish_race()
 
-    if player_finished and opponent_finished:
-        _finish_race()
-    elif player_finished and race_time > player_finish_time + 1.2:
-        _finish_race()
-    elif opponent_finished and race_time > opponent_finish_time + 1.2:
-        _finish_race()
+
+func _update_post_finish_drive(dt: float) -> void:
+    if post_finish_drive_time >= POST_FINISH_DRIVE_SECONDS:
+        return
+
+    post_finish_drive_time += dt
+    race_time += dt
+
+    _update_player_physics(dt)
+    _update_opponent(dt)
 
 
 func _update_countdown(dt: float) -> void:
@@ -446,8 +466,7 @@ func _update_player_physics(dt: float) -> void:
     if zero_to_100_time < 0.0 and speed_kmh >= 100.0:
         zero_to_100_time = race_time
 
-    if player_distance >= RACE_DISTANCE_M:
-        player_distance = RACE_DISTANCE_M
+    if not player_finished and player_distance >= RACE_DISTANCE_M:
         player_finished = true
         player_finish_time = race_time
 
@@ -514,22 +533,21 @@ func _update_opponent(dt: float) -> void:
     opponent_speed_kmh = minf(opponent_speed_kmh, opponent_max_speed)
     opponent_distance += (opponent_speed_kmh / 3.6) * dt
 
-    if opponent_distance >= RACE_DISTANCE_M:
-        opponent_distance = RACE_DISTANCE_M
+    if not opponent_finished and opponent_distance >= RACE_DISTANCE_M:
         opponent_finished = true
         opponent_finish_time = race_time
 
 
 func _finish_race() -> void:
-    if screen == Screen.RESULT:
+    if screen == Screen.RESULT or not player_finished:
         return
 
-    if not player_finished:
-        player_finish_time = race_time + 9.0
-    if not opponent_finished:
-        opponent_finish_time = race_time + 9.0
-
-    last_win = player_finish_time <= opponent_finish_time
+    # If the opponent already crossed, compare the recorded finish times.
+    # Otherwise the player is first across the line and has won immediately.
+    if opponent_finished:
+        last_win = player_finish_time <= opponent_finish_time
+    else:
+        last_win = true
 
     if last_win:
         wins += 1
@@ -544,6 +562,7 @@ func _finish_race() -> void:
 
     money += last_reward
     save()
+    post_finish_drive_time = 0.0
     screen = Screen.RESULT
 
 

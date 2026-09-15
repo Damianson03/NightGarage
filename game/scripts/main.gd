@@ -50,6 +50,8 @@ var result_title: Label
 var result_stats: Label
 
 var last_screen := -1
+var finish_camera_transform: Transform3D = Transform3D.IDENTITY
+var finish_camera_locked := false
 
 
 func _ready() -> void:
@@ -63,6 +65,12 @@ func _process(delta: float) -> void:
     state.update(delta)
 
     if state.screen != last_screen:
+        # Freeze the exact racing-camera view from the moment the player
+        # reaches the finish. Cars will keep moving through this fixed shot.
+        if state.screen == GameState.Screen.RESULT and last_screen == GameState.Screen.RACING:
+            finish_camera_transform = camera.global_transform
+            finish_camera_locked = true
+
         _apply_screen()
 
     _update_world()
@@ -371,6 +379,7 @@ func _apply_screen() -> void:
         opponent_car.position = Vector3(-1.70, 0.0, 0.0)
         last_player_wheel_distance = 0.0
         last_opponent_wheel_distance = 0.0
+        finish_camera_locked = false
 
     if state.screen == GameState.Screen.RACING:
         state.set_gas(false)
@@ -394,6 +403,19 @@ func _update_world() -> void:
 
     player_car.position.z = -state.player_distance
     opponent_car.position.z = -state.opponent_distance
+
+    # Once the player crosses the finish, the camera stays fixed there while
+    # the cars continue driving out of frame behind the results overlay.
+    if state.screen == GameState.Screen.RESULT:
+        if finish_camera_locked:
+            camera.global_transform = finish_camera_transform
+        else:
+            camera.position = Vector3(8.15, 1.88, -GameState.RACE_DISTANCE_M + 2.65)
+            camera.look_at(
+                Vector3(0.54, 0.76, -GameState.RACE_DISTANCE_M - 13.5),
+                Vector3.UP
+            )
+        return
 
     var blend: float = 0.0
     if state.screen == GameState.Screen.RACING:

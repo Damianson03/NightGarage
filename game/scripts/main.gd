@@ -132,53 +132,63 @@ func _build_world() -> void:
 func _build_drag_strip_environment() -> void:
     var shoulder_material := _get_cached_pbr_material(
         "road_shoulder",
-        "res://assets/pbr/road/asphalt_albedo.png",
-        "res://assets/pbr/road/asphalt_normal.png",
-        "res://assets/pbr/road/asphalt_roughness.png",
-        Vector3(18.0, 1.0, 175.0),
-        Color(0.68, 0.69, 0.72),
-        0.02,
-        0.94
+        "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
+        "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
+        Vector3(10.0, 1.0, 125.0),
+        Color(0.82, 0.82, 0.84),
+        0.01,
+        0.95,
+        1.55
     )
     var road_material := _get_cached_pbr_material(
         "road_main",
-        "res://assets/pbr/road/asphalt_albedo.png",
-        "res://assets/pbr/road/asphalt_normal.png",
-        "res://assets/pbr/road/asphalt_roughness.png",
-        Vector3(10.0, 1.0, 145.0),
-        Color(0.94, 0.94, 0.97),
-        0.02,
-        0.86
+        "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
+        "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
+        Vector3(7.0, 1.0, 110.0),
+        Color(0.98, 0.98, 1.0),
+        0.01,
+        0.82,
+        1.75
     )
     var lane_material := _get_cached_pbr_material(
         "road_lane_gloss",
-        "res://assets/pbr/road/asphalt_wet_albedo.png",
-        "res://assets/pbr/road/asphalt_normal.png",
-        "res://assets/pbr/road/asphalt_wet_roughness.png",
-        Vector3(4.0, 1.0, 120.0),
-        Color(0.95, 0.95, 1.0),
-        0.04,
-        0.42
+        "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
+        "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
+        Vector3(3.4, 1.0, 92.0),
+        Color(0.78, 0.80, 0.88),
+        0.03,
+        0.26,
+        2.00
     )
     var launch_material := _get_cached_pbr_material(
         "road_launch_box",
-        "res://assets/pbr/road/asphalt_wet_albedo.png",
-        "res://assets/pbr/road/asphalt_normal.png",
-        "res://assets/pbr/road/asphalt_wet_roughness.png",
-        Vector3(3.0, 1.0, 18.0),
-        Color(0.98, 0.98, 1.0),
-        0.04,
-        0.36
+        "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
+        "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
+        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
+        Vector3(2.4, 1.0, 14.0),
+        Color(0.72, 0.74, 0.82),
+        0.03,
+        0.22,
+        2.10
     )
     var concrete_material := _get_cached_pbr_material(
         "track_concrete",
         "res://assets/pbr/road/concrete_albedo.png",
         "res://assets/pbr/road/concrete_normal.png",
         "res://assets/pbr/road/concrete_roughness.png",
+        "",
         Vector3(8.0, 1.0, 150.0),
         Color(0.95, 0.95, 0.98),
         0.0,
-        0.88
+        0.88,
+        1.0
     )
 
     # Dark foundation around the whole scene.
@@ -441,7 +451,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  REALISTIC PBR ROAD", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  REAL ASPHALT 02", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -1277,10 +1287,12 @@ func _get_cached_pbr_material(
     albedo_path: String,
     normal_path: String,
     roughness_path: String,
+    ao_path: String,
     uv_scale: Vector3,
     tint: Color,
     metallic: float,
-    roughness_value: float
+    roughness_value: float,
+    normal_strength: float
 ) -> StandardMaterial3D:
     if material_cache.has(cache_key):
         return material_cache[cache_key] as StandardMaterial3D
@@ -1297,9 +1309,13 @@ func _get_cached_pbr_material(
     if ResourceLoader.exists(normal_path):
         material.normal_enabled = true
         material.normal_texture = load(normal_path)
-        material.normal_scale = 1.15
+        material.normal_scale = normal_strength
     if ResourceLoader.exists(roughness_path):
         material.roughness_texture = load(roughness_path)
+    if ao_path != "" and ResourceLoader.exists(ao_path):
+        material.ao_enabled = true
+        material.ao_texture = load(ao_path)
+        material.ao_light_affect = 0.6
 
     material_cache[cache_key] = material
     return material

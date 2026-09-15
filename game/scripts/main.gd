@@ -90,17 +90,17 @@ func _build_world() -> void:
     var world := WorldEnvironment.new()
     var env := Environment.new()
     env.background_mode = Environment.BG_COLOR
-    env.background_color = Color(0.005, 0.008, 0.018)
+    env.background_color = Color(0.004, 0.006, 0.014)
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color(0.15, 0.18, 0.28)
-    env.ambient_light_energy = 0.9
+    env.ambient_light_color = Color(0.16, 0.20, 0.30)
+    env.ambient_light_energy = 1.0
     world.environment = env
     add_child(world)
 
     var moon := DirectionalLight3D.new()
-    moon.rotation_degrees = Vector3(-48.0, -30.0, 0.0)
-    moon.light_color = Color(0.58, 0.68, 1.0)
-    moon.light_energy = 1.7
+    moon.rotation_degrees = Vector3(-46.0, -24.0, 0.0)
+    moon.light_color = Color(0.56, 0.67, 1.0)
+    moon.light_energy = 1.9
     moon.shadow_enabled = false
     add_child(moon)
 
@@ -111,42 +111,7 @@ func _build_world() -> void:
     warm_light.omni_range = 18.0
     add_child(warm_light)
 
-    _add_box(
-        Vector3(0.0, -0.10, -250.0),
-        Vector3(12.0, 0.20, 520.0),
-        Color(0.045, 0.05, 0.065),
-        0.15,
-        0.34
-    )
-
-    for z in range(0, 500, 12):
-        _add_box(
-            Vector3(0.0, 0.015, -float(z)),
-            Vector3(0.08, 0.025, 4.2),
-            Color(0.86, 0.80, 0.30),
-            0.0,
-            0.55
-        )
-
-    _add_box(
-        Vector3(0.0, 0.025, -2.8),
-        Vector3(10.0, 0.035, 0.34),
-        Color(0.94, 0.94, 0.96),
-        0.0,
-        0.4
-    )
-
-    _add_box(
-        Vector3(0.0, 0.025, -402.336),
-        Vector3(10.0, 0.035, 0.48),
-        Color(0.15, 0.95, 0.35),
-        0.0,
-        0.4
-    )
-
-    for z in range(0, 430, 26):
-        _add_lamp(-6.2, -float(z))
-        _add_lamp(6.2, -float(z))
+    _build_drag_strip_environment()
 
     player_car = _create_golf_car(Color(0.78, 0.018, 0.028))
     player_car.position = Vector3(1.70, 0.0, 0.0)
@@ -161,6 +126,293 @@ func _build_world() -> void:
     _add_car_headlights(opponent_car, 2.6)
 
     _set_garage_camera()
+
+
+func _build_drag_strip_environment() -> void:
+    # Base terrain around the strip.
+    _add_box(
+        Vector3(0.0, -0.46, -250.0),
+        Vector3(92.0, 0.90, 560.0),
+        Color(0.022, 0.026, 0.035),
+        0.12,
+        0.96
+    )
+
+    # Wide roadside aprons.
+    _add_box(
+        Vector3(-14.6, -0.12, -245.0),
+        Vector3(16.0, 0.20, 520.0),
+        Color(0.050, 0.052, 0.060),
+        0.14,
+        0.72
+    )
+    _add_box(
+        Vector3(14.6, -0.12, -245.0),
+        Vector3(16.0, 0.20, 520.0),
+        Color(0.050, 0.052, 0.060),
+        0.14,
+        0.72
+    )
+
+    # Main drag strip and shoulders.
+    _add_box(
+        Vector3(0.0, -0.09, -245.0),
+        Vector3(16.8, 0.18, 520.0),
+        Color(0.055, 0.058, 0.072),
+        0.24,
+        0.30
+    )
+    _add_box(
+        Vector3(0.0, -0.03, -245.0),
+        Vector3(12.5, 0.05, 518.0),
+        Color(0.038, 0.042, 0.050),
+        0.20,
+        0.16
+    )
+
+    # Slightly glossier racing lanes, inspired by polished/wet CSR-like roads.
+    for lane_x in [-1.70, 1.70]:
+        _add_box(
+            Vector3(lane_x, -0.004, -220.0),
+            Vector3(2.0, 0.012, 455.0),
+            Color(0.072, 0.076, 0.090),
+            0.42,
+            0.06
+        )
+        _add_box(
+            Vector3(lane_x, 0.004, -38.0),
+            Vector3(2.2, 0.012, 66.0),
+            Color(0.085, 0.088, 0.100),
+            0.48,
+            0.04
+        )
+
+    # Outer white lines.
+    _add_box(
+        Vector3(-5.65, 0.014, -245.0),
+        Vector3(0.10, 0.018, 515.0),
+        Color(0.92, 0.93, 0.96),
+        0.0,
+        0.48
+    )
+    _add_box(
+        Vector3(5.65, 0.014, -245.0),
+        Vector3(0.10, 0.018, 515.0),
+        Color(0.92, 0.93, 0.96),
+        0.0,
+        0.48
+    )
+
+    # Center dashed lane divider.
+    for z in range(6, 408, 12):
+        _add_box(
+            Vector3(0.0, 0.014, -float(z)),
+            Vector3(0.09, 0.018, 4.0),
+            Color(0.96, 0.85, 0.28),
+            0.0,
+            0.42
+        )
+
+    # Rubber seams and lane reference lines.
+    for seam_x in [-3.20, -0.95, 0.95, 3.20]:
+        _add_box(
+            Vector3(seam_x, 0.003, -220.0),
+            Vector3(0.10, 0.010, 455.0),
+            Color(0.030, 0.030, 0.036),
+            0.10,
+            0.10
+        )
+
+    # Start area and burnout box.
+    _add_box(
+        Vector3(0.0, -0.006, -22.0),
+        Vector3(11.7, 0.018, 44.0),
+        Color(0.066, 0.070, 0.080),
+        0.28,
+        0.10
+    )
+    _add_checkered_band(-2.90, 11.6, 0.34)
+    _add_checkered_band(-402.34, 11.6, 0.44)
+
+    # Staging and launch helper lines.
+    _add_box(Vector3(0.0, 0.020, -1.15), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.30)
+    _add_box(Vector3(0.0, 0.020, -1.95), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.30)
+    _add_box(Vector3(0.0, 0.020, -5.80), Vector3(11.4, 0.015, 0.10), Color(0.90, 0.90, 0.92), 0.0, 0.35)
+
+    _add_start_tree(0.0, -3.80)
+    _add_finish_gantry(-402.34)
+    _build_trackside_barriers()
+    _build_trackside_fences()
+    _build_trackside_props()
+
+    for z in range(0, 430, 22):
+        _add_lamp(-7.9, -float(z))
+        _add_lamp(7.9, -float(z))
+
+
+func _add_checkered_band(z: float, width: float, depth: float) -> void:
+    var segment_width: float = width / 12.0
+    for i in range(12):
+        var x: float = -width * 0.5 + segment_width * (float(i) + 0.5)
+        var white_first: bool = (i % 2) == 0
+        _add_box(
+            Vector3(x, 0.026, z),
+            Vector3(segment_width - 0.02, 0.020, depth),
+            Color(0.95, 0.95, 0.96) if white_first else Color(0.08, 0.08, 0.10),
+            0.0,
+            0.30
+        )
+
+
+func _add_start_tree(x: float, z: float) -> void:
+    _add_box(Vector3(x, 1.78, z), Vector3(0.14, 3.25, 0.14), Color(0.14, 0.14, 0.16), 0.36, 0.52)
+    _add_box(Vector3(x, 3.18, z), Vector3(0.44, 0.22, 0.18), Color(0.12, 0.12, 0.13), 0.28, 0.46)
+
+    var light_offsets: Array[float] = [2.84, 2.44, 2.12, 1.80, 1.48, 1.16]
+    var light_colors: Array[Color] = [
+        Color(0.88, 0.96, 1.0),
+        Color(0.88, 0.96, 1.0),
+        Color(1.0, 0.72, 0.12),
+        Color(1.0, 0.72, 0.12),
+        Color(1.0, 0.72, 0.12),
+        Color(0.18, 0.95, 0.30)
+    ]
+
+    for i in range(light_offsets.size()):
+        _add_box(
+            Vector3(x, light_offsets[i], z - 0.10),
+            Vector3(0.26, 0.16, 0.09),
+            light_colors[i],
+            0.0,
+            0.16
+        )
+
+
+func _add_finish_gantry(z: float) -> void:
+    _add_box(Vector3(-6.2, 2.85, z), Vector3(0.22, 5.6, 0.22), Color(0.18, 0.18, 0.20), 0.40, 0.46)
+    _add_box(Vector3(6.2, 2.85, z), Vector3(0.22, 5.6, 0.22), Color(0.18, 0.18, 0.20), 0.40, 0.46)
+    _add_box(Vector3(0.0, 5.55, z), Vector3(12.9, 0.22, 0.24), Color(0.20, 0.20, 0.22), 0.38, 0.40)
+    _add_box(Vector3(0.0, 4.72, z), Vector3(7.8, 1.05, 0.16), Color(0.055, 0.058, 0.066), 0.20, 0.28)
+
+    for i in range(8):
+        var x: float = -3.15 + float(i) * 0.90
+        _add_box(
+            Vector3(x, 4.72, z - 0.01),
+            Vector3(0.76, 0.82, 0.10),
+            Color(0.96, 0.96, 0.97) if (i % 2) == 0 else Color(0.10, 0.10, 0.12),
+            0.0,
+            0.24
+        )
+
+
+func _build_trackside_barriers() -> void:
+    for side in [-1.0, 1.0]:
+        var x: float = side * 6.55
+        _add_box(
+            Vector3(x, 0.42, -245.0),
+            Vector3(0.36, 0.82, 515.0),
+            Color(0.64, 0.66, 0.70),
+            0.06,
+            0.86
+        )
+        _add_box(
+            Vector3(x, 0.86, -245.0),
+            Vector3(0.38, 0.10, 515.0),
+            Color(0.96, 0.18, 0.18) if side < 0.0 else Color(0.20, 0.52, 1.0),
+            0.0,
+            0.48
+        )
+
+        for z in range(8, 420, 20):
+            _add_box(
+                Vector3(x, 0.55, -float(z)),
+                Vector3(0.06, 0.08, 0.42),
+                Color(1.0, 0.70, 0.18),
+                0.0,
+                0.20
+            )
+
+
+func _build_trackside_fences() -> void:
+    for side in [-1.0, 1.0]:
+        var fence_x: float = side * 8.85
+        for z in range(0, 430, 10):
+            _add_box(
+                Vector3(fence_x, 1.15, -float(z)),
+                Vector3(0.08, 2.3, 0.08),
+                Color(0.32, 0.34, 0.38),
+                0.24,
+                0.74
+            )
+
+        for y in [0.52, 1.12, 1.72]:
+            _add_box(
+                Vector3(fence_x, y, -210.0),
+                Vector3(0.04, 0.04, 425.0),
+                Color(0.42, 0.44, 0.48),
+                0.14,
+                0.80
+            )
+
+
+func _build_trackside_props() -> void:
+    # Sponsor-style light panels and billboard blocks.
+    for z in [ -36.0, -92.0, -148.0, -214.0, -286.0, -348.0 ]:
+        _add_billboard(-11.9, z, Color(0.18, 0.40, 1.0), Color(0.96, 0.96, 0.98))
+        _add_billboard(11.9, z - 14.0, Color(1.0, 0.26, 0.22), Color(0.96, 0.96, 0.98))
+
+    # Industrial buildings / city silhouettes.
+    var left_blocks: Array[Vector3] = [
+        Vector3(-16.0, 2.1, -52.0),
+        Vector3(-17.5, 3.0, -134.0),
+        Vector3(-16.2, 2.5, -224.0),
+        Vector3(-18.4, 3.4, -330.0)
+    ]
+    var left_sizes: Array[Vector3] = [
+        Vector3(6.4, 4.2, 20.0),
+        Vector3(8.4, 6.0, 28.0),
+        Vector3(7.0, 5.0, 22.0),
+        Vector3(9.2, 6.8, 32.0)
+    ]
+    for i in range(left_blocks.size()):
+        _add_box(left_blocks[i], left_sizes[i], Color(0.050, 0.055, 0.070), 0.10, 0.88)
+
+    var right_blocks: Array[Vector3] = [
+        Vector3(16.6, 2.4, -76.0),
+        Vector3(18.0, 3.3, -176.0),
+        Vector3(15.8, 2.7, -274.0),
+        Vector3(17.0, 3.7, -362.0)
+    ]
+    var right_sizes: Array[Vector3] = [
+        Vector3(7.4, 4.8, 26.0),
+        Vector3(8.8, 6.6, 30.0),
+        Vector3(6.8, 5.4, 22.0),
+        Vector3(9.6, 7.4, 34.0)
+    ]
+    for i in range(right_blocks.size()):
+        _add_box(right_blocks[i], right_sizes[i], Color(0.045, 0.050, 0.064), 0.10, 0.90)
+
+    # Shipping containers and utility boxes close to the strip.
+    var container_colors: Array[Color] = [
+        Color(0.72, 0.16, 0.12),
+        Color(0.12, 0.44, 0.88),
+        Color(0.78, 0.62, 0.18),
+        Color(0.18, 0.56, 0.34)
+    ]
+    var positions: Array[Vector3] = [
+        Vector3(-12.6, 0.50, -122.0),
+        Vector3(-12.6, 0.50, -126.5),
+        Vector3(12.8, 0.50, -242.0),
+        Vector3(12.8, 0.50, -246.5)
+    ]
+    for i in range(positions.size()):
+        _add_box(positions[i], Vector3(2.4, 1.0, 4.2), container_colors[i % container_colors.size()], 0.04, 0.88)
+
+
+func _add_billboard(x: float, z: float, panel_color: Color, frame_color: Color) -> void:
+    _add_box(Vector3(x, 1.8, z), Vector3(0.18, 3.6, 0.18), Color(0.18, 0.18, 0.20), 0.34, 0.56)
+    _add_box(Vector3(x, 3.95, z), Vector3(4.4, 2.2, 0.18), frame_color, 0.04, 0.40)
+    _add_box(Vector3(x, 3.95, z - 0.02), Vector3(4.0, 1.8, 0.08), panel_color, 0.20, 0.18)
 
 
 func _build_ui() -> void:
@@ -180,7 +432,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  GOLF 7 MODEL", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  ROAD & STRIP", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -999,13 +1251,15 @@ func _create_golf_placeholder(body_color: Color) -> Node3D:
 
 
 func _add_lamp(x: float, z: float) -> void:
-    _add_box(Vector3(x, 2.6, z), Vector3(0.10, 5.2, 0.10), Color(0.12, 0.13, 0.17), 0.65, 0.65)
+    _add_box(Vector3(x, 2.7, z), Vector3(0.12, 5.4, 0.12), Color(0.14, 0.15, 0.18), 0.56, 0.52)
+    _add_box(Vector3(x, 5.28, z - 0.56), Vector3(0.64, 0.10, 1.16), Color(0.16, 0.16, 0.18), 0.42, 0.48)
+    _add_box(Vector3(x, 5.10, z - 1.10), Vector3(0.34, 0.14, 0.34), Color(0.98, 0.76, 0.46), 0.0, 0.18)
 
     var light := OmniLight3D.new()
-    light.position = Vector3(x, 5.0, z)
-    light.light_color = Color(1.0, 0.75, 0.48)
-    light.light_energy = 3.2
-    light.omni_range = 10.0
+    light.position = Vector3(x, 5.0, z - 1.00)
+    light.light_color = Color(1.0, 0.76, 0.46)
+    light.light_energy = 3.8
+    light.omni_range = 12.0
     add_child(light)
 
 

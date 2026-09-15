@@ -484,16 +484,17 @@ func _update_world(delta: float) -> void:
     var player_z: float = -float(state.player_distance)
 
     # Positive gap = rival is ahead. Negative gap = player is ahead.
-    # We cap the influence so a large lead never pulls the player out of shot.
+    # The camera itself stays anchored to the player's Golf. Only the aiming
+    # direction changes, so the player's whole car remains visible.
     var gap_m: float = float(state.opponent_distance - state.player_distance)
-    var visible_gap_m: float = clampf(gap_m, -16.0, 16.0)
-    var desired_camera_shift_z: float = -visible_gap_m * 0.22
+    var visible_gap_m: float = clampf(gap_m, -12.0, 12.0)
+    var desired_aim_shift_z: float = -visible_gap_m * 0.38
 
-    # Smooth framing instead of snapping the camera every frame.
-    var camera_response: float = clampf(delta * 3.4, 0.0, 1.0)
+    # Smooth angular response instead of snapping toward the rival.
+    var camera_response: float = clampf(delta * 3.8, 0.0, 1.0)
     camera_gap_shift_z = lerpf(
         camera_gap_shift_z,
-        desired_camera_shift_z,
+        desired_aim_shift_z,
         camera_response
     )
 
@@ -501,27 +502,26 @@ func _update_world(delta: float) -> void:
     # player's right side, so we see the front and right flank of the Golf.
     var start_pos: Vector3 = Vector3(6.35, 1.48, player_z - 6.35)
 
-    # During the race the camera follows the player, but slides a little
-    # forward when losing and backward when winning. That keeps the rival
-    # visible without making the framing feel detached from the player's car.
+    # Race camera remains locked to the player's car. Do not move it forward
+    # or backward because of the race gap; that could push the player out of
+    # the frame. Rival tracking is handled by the look-at target below.
     var side_pos: Vector3 = Vector3(
         8.15,
         1.88,
-        player_z + 2.65 + camera_gap_shift_z
+        player_z + 2.65
     )
     var cam_pos: Vector3 = start_pos.lerp(side_pos, blend)
 
     var start_target: Vector3 = Vector3(1.70, 0.74, player_z - 0.35)
 
-    # Aim farther across the lanes than before. The longitudinal target also
-    # moves toward whichever direction the rival is in: forward if the rival
-    # leads, backward if the player leads.
-    var rival_bias_x: float = lerpf(1.70, -1.70, 0.46)
-    var target_gap_shift_z: float = -visible_gap_m * 0.32
+    # Look across the lanes toward the rival. Longitudinal aim is symmetric:
+    # losing -> clearly look forward, winning -> clearly look backward.
+    # Around an even race the camera points only slightly ahead.
+    var rival_bias_x: float = lerpf(1.70, -1.70, 0.52)
     var side_target: Vector3 = Vector3(
         rival_bias_x,
         0.76,
-        player_z - 10.5 + target_gap_shift_z
+        player_z - 1.35 + camera_gap_shift_z
     )
     var target: Vector3 = start_target.lerp(side_target, blend)
 

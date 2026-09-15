@@ -46,12 +46,17 @@ var gas_button: Button
 var shift_button: Button
 var race_hint: Label
 
+var race_progress_track: ColorRect
+var player_progress_marker: Label
+var opponent_progress_marker: Label
+
 var result_title: Label
 var result_stats: Label
 
 var last_screen := -1
 var finish_camera_transform: Transform3D = Transform3D.IDENTITY
 var finish_camera_locked := false
+var camera_gap_shift_z: float = 0.0
 
 
 func _ready() -> void:
@@ -73,7 +78,7 @@ func _process(delta: float) -> void:
 
         _apply_screen()
 
-    _update_world()
+    _update_world(delta)
     _update_ui()
 
 
@@ -236,6 +241,59 @@ func _build_ui() -> void:
     race_panel.size = Vector2(1280, 720)
     layer.add_child(race_panel)
 
+    # Full 1/4-mile progress strip. Both markers are separated vertically,
+    # so they remain readable even when the cars are side by side.
+    var progress_back := ColorRect.new()
+    progress_back.color = Color(0.015, 0.020, 0.035, 0.78)
+    progress_back.position = Vector2(244.0, 4.0)
+    progress_back.size = Vector2(792.0, 42.0)
+    progress_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    race_panel.add_child(progress_back)
+
+    race_progress_track = ColorRect.new()
+    race_progress_track.color = Color(0.72, 0.76, 0.84, 0.72)
+    race_progress_track.position = Vector2(280.0, 21.0)
+    race_progress_track.size = Vector2(720.0, 5.0)
+    race_progress_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    race_panel.add_child(race_progress_track)
+
+    var start_cap := ColorRect.new()
+    start_cap.color = Color(0.92, 0.94, 1.0, 0.92)
+    start_cap.position = Vector2(278.0, 14.0)
+    start_cap.size = Vector2(4.0, 19.0)
+    start_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    race_panel.add_child(start_cap)
+
+    var finish_cap := ColorRect.new()
+    finish_cap.color = Color(0.92, 0.94, 1.0, 0.92)
+    finish_cap.position = Vector2(998.0, 14.0)
+    finish_cap.size = Vector2(4.0, 19.0)
+    finish_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    race_panel.add_child(finish_cap)
+
+    var start_text := _label("START", Vector2(224.0, 12.0), 13)
+    start_text.size = Vector2(54.0, 22.0)
+    start_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    start_text.modulate = Color(0.72, 0.75, 0.82)
+    race_panel.add_child(start_text)
+
+    var finish_text := _label("META", Vector2(1008.0, 12.0), 13)
+    finish_text.size = Vector2(48.0, 22.0)
+    finish_text.modulate = Color(0.72, 0.75, 0.82)
+    race_panel.add_child(finish_text)
+
+    player_progress_marker = _label("TY▼", Vector2(262.0, -2.0), 14)
+    player_progress_marker.size = Vector2(42.0, 22.0)
+    player_progress_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    player_progress_marker.modulate = Color(1.0, 0.28, 0.24)
+    race_panel.add_child(player_progress_marker)
+
+    opponent_progress_marker = _label("R▲", Vector2(266.0, 25.0), 14)
+    opponent_progress_marker.size = Vector2(34.0, 20.0)
+    opponent_progress_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    opponent_progress_marker.modulate = Color(0.30, 0.78, 1.0)
+    race_panel.add_child(opponent_progress_marker)
+
     countdown_label = _label("3", Vector2(520, 78), 78)
     countdown_label.size = Vector2(240, 100)
     countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -380,6 +438,7 @@ func _apply_screen() -> void:
         last_player_wheel_distance = 0.0
         last_opponent_wheel_distance = 0.0
         finish_camera_locked = false
+        camera_gap_shift_z = 0.0
 
     if state.screen == GameState.Screen.RACING:
         state.set_gas(false)
@@ -388,10 +447,11 @@ func _apply_screen() -> void:
         _update_result_panel()
 
 
-func _update_world() -> void:
+func _update_world(delta: float) -> void:
     _update_wheel_animation()
 
     if state.screen == GameState.Screen.GARAGE:
+        camera_gap_shift_z = 0.0
         var orbit: float = float(Time.get_ticks_msec()) / 1000.0
         camera.position = Vector3(
             5.35 + sin(orbit * 0.16) * 0.75,
@@ -412,7 +472,7 @@ func _update_world() -> void:
         else:
             camera.position = Vector3(8.15, 1.88, -GameState.RACE_DISTANCE_M + 2.65)
             camera.look_at(
-                Vector3(0.54, 0.76, -GameState.RACE_DISTANCE_M - 13.5),
+                Vector3(0.20, 0.76, -GameState.RACE_DISTANCE_M - 12.0),
                 Vector3.UP
             )
         return
@@ -422,24 +482,47 @@ func _update_world() -> void:
         blend = _smoothstep(0.0, 1.55, state.race_time)
 
     var player_z: float = -float(state.player_distance)
-    var opponent_z: float = -float(state.opponent_distance)
+
+    # Positive gap = rival is ahead. Negative gap = player is ahead.
+    # We cap the influence so a large lead never pulls the player out of shot.
+    var gap_m: float = float(state.opponent_distance - state.player_distance)
+    var visible_gap_m: float = clampf(gap_m, -16.0, 16.0)
+    var desired_camera_shift_z: float = -visible_gap_m * 0.22
+
+    # Smooth framing instead of snapping the camera every frame.
+    var camera_response: float = clampf(delta * 3.4, 0.0, 1.0)
+    camera_gap_shift_z = lerpf(
+        camera_gap_shift_z,
+        desired_camera_shift_z,
+        camera_response
+    )
 
     # CSR-style opening shot: camera is in front of the player and on the
     # player's right side, so we see the front and right flank of the Golf.
-    var start_pos := Vector3(6.35, 1.48, player_z - 6.35)
+    var start_pos: Vector3 = Vector3(6.35, 1.48, player_z - 6.35)
 
-    # After launch the camera slides into a low side-follow position.
-    # It stays on the player's right side and looks slightly across both lanes.
-    var side_pos := Vector3(8.15, 1.88, player_z + 2.65)
+    # During the race the camera follows the player, but slides a little
+    # forward when losing and backward when winning. That keeps the rival
+    # visible without making the framing feel detached from the player's car.
+    var side_pos: Vector3 = Vector3(
+        8.15,
+        1.88,
+        player_z + 2.65 + camera_gap_shift_z
+    )
     var cam_pos: Vector3 = start_pos.lerp(side_pos, blend)
 
-    var start_target := Vector3(1.70, 0.74, player_z - 0.35)
+    var start_target: Vector3 = Vector3(1.70, 0.74, player_z - 0.35)
 
-    # Bias the racing target about one third toward the rival. This keeps
-    # the player dominant in frame while naturally revealing the opponent.
-    var rival_bias_x: float = lerpf(1.70, -1.70, 0.34)
-    var rival_bias_z: float = lerpf(player_z, opponent_z, 0.18) - 13.5
-    var side_target := Vector3(rival_bias_x, 0.76, rival_bias_z)
+    # Aim farther across the lanes than before. The longitudinal target also
+    # moves toward whichever direction the rival is in: forward if the rival
+    # leads, backward if the player leads.
+    var rival_bias_x: float = lerpf(1.70, -1.70, 0.46)
+    var target_gap_shift_z: float = -visible_gap_m * 0.32
+    var side_target: Vector3 = Vector3(
+        rival_bias_x,
+        0.76,
+        player_z - 10.5 + target_gap_shift_z
+    )
     var target: Vector3 = start_target.lerp(side_target, blend)
 
     camera.position = cam_pos
@@ -458,6 +541,7 @@ func _update_ui() -> void:
         time_label.text = "%.3f s" % state.race_time
         distance_label.text = "%d / 402 m" % int(round(state.player_distance))
         rpm_bar.value = state.rpm
+        _update_race_progress()
         _update_rpm_zones()
 
         if state.zero_to_100_time > 0.0:
@@ -490,6 +574,33 @@ func _update_ui() -> void:
             or state.shifting
             or state.gear >= GameState.MAX_GEARS
         )
+
+
+func _update_race_progress() -> void:
+    if player_progress_marker == null or opponent_progress_marker == null:
+        return
+
+    var track_x: float = 280.0
+    var track_width: float = 720.0
+    var race_distance: float = float(GameState.RACE_DISTANCE_M)
+
+    var player_ratio: float = clampf(
+        float(state.player_distance) / race_distance,
+        0.0,
+        1.0
+    )
+    var opponent_ratio: float = clampf(
+        float(state.opponent_distance) / race_distance,
+        0.0,
+        1.0
+    )
+
+    var player_x: float = track_x + track_width * player_ratio
+    var opponent_x: float = track_x + track_width * opponent_ratio
+
+    # Separate rows mean both markers remain visible in a dead heat.
+    player_progress_marker.position = Vector2(player_x - 21.0, -2.0)
+    opponent_progress_marker.position = Vector2(opponent_x - 17.0, 25.0)
 
 
 func _update_rpm_zones() -> void:

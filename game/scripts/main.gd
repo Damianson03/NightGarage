@@ -58,6 +58,10 @@ var last_screen := -1
 var finish_camera_transform: Transform3D = Transform3D.IDENTITY
 var finish_camera_locked := false
 var camera_gap_shift_z: float = 0.0
+var player_suspension_pitch_deg: float = 0.0
+var player_suspension_pitch_velocity: float = 0.0
+var previous_player_speed_ms: float = 0.0
+var player_visual_model: Node3D
 var material_cache: Dictionary = {}
 
 
@@ -466,7 +470,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  MOBILE OPTIMIZED PBR", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  SUSPENSION WEIGHT TRANSFER", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -729,6 +733,10 @@ func _apply_screen() -> void:
         last_opponent_wheel_distance = 0.0
         finish_camera_locked = false
         camera_gap_shift_z = 0.0
+        player_suspension_pitch_deg = 0.0
+        player_suspension_pitch_velocity = 0.0
+        previous_player_speed_ms = 0.0
+        _apply_player_suspension_pose()
 
     if state.screen == GameState.Screen.RACING:
         state.set_gas(false)
@@ -742,6 +750,10 @@ func _update_world(delta: float) -> void:
 
     if state.screen == GameState.Screen.GARAGE:
         camera_gap_shift_z = 0.0
+        player_suspension_pitch_deg = 0.0
+        player_suspension_pitch_velocity = 0.0
+        previous_player_speed_ms = 0.0
+        _apply_player_suspension_pose()
         var orbit: float = float(Time.get_ticks_msec()) / 1000.0
         camera.position = Vector3(
             5.35 + sin(orbit * 0.16) * 0.75,
@@ -753,6 +765,7 @@ func _update_world(delta: float) -> void:
 
     player_car.position.z = -state.player_distance
     opponent_car.position.z = -state.opponent_distance
+    _update_player_suspension(delta)
 
     # Once the player crosses the finish, the camera stays fixed there while
     # the cars continue driving out of frame behind the results overlay.
@@ -817,6 +830,61 @@ func _update_world(delta: float) -> void:
 
     camera.position = cam_pos
     camera.look_at(target, Vector3.UP)
+
+
+func _update_player_suspension(delta: float) -> void:
+    if player_visual_model == null:
+        return
+
+    var current_speed_ms: float = float(state.speed_kmh) / 3.6
+    var safe_delta: float = maxf(delta, 0.001)
+    var longitudinal_accel: float = (current_speed_ms - previous_player_speed_ms) / safe_delta
+    previous_player_speed_ms = current_speed_ms
+
+    var target_pitch_deg: float = 0.0
+
+    if state.screen == GameState.Screen.RACING and not state.player_finished:
+        if state.shifting:
+            # During the torque interruption the body settles back toward level.
+            target_pitch_deg = 0.0
+        else:
+            # Positive X pitch raises the front of the car and lowers the rear.
+            # Cap the effect so it reads as suspension movement rather than a stunt.
+            var positive_accel: float = maxf(0.0, longitudinal_accel)
+            target_pitch_deg = clampf(positive_accel * 0.26, 0.0, 1.35)
+
+            # Keep a small amount of squat while the car is still pulling hard,
+            # even if frame-to-frame acceleration becomes noisy at high speed.
+            if state.race_time < 1.1 and state.speed_kmh > 3.0:
+                target_pitch_deg = maxf(target_pitch_deg, 0.72)
+
+    # Critically damped-ish spring. It reacts quickly to a shift but avoids snapping.
+    var spring_strength: float = 105.0 if state.shifting else 72.0
+    var damping: float = 18.5 if state.shifting else 15.5
+    var spring_accel: float = (
+        (target_pitch_deg - player_suspension_pitch_deg) * spring_strength
+        - player_suspension_pitch_velocity * damping
+    )
+
+    player_suspension_pitch_velocity += spring_accel * safe_delta
+    player_suspension_pitch_deg += player_suspension_pitch_velocity * safe_delta
+    player_suspension_pitch_deg = clampf(player_suspension_pitch_deg, -0.18, 1.45)
+
+    _apply_player_suspension_pose()
+
+
+func _apply_player_suspension_pose() -> void:
+    if player_visual_model == null:
+        return
+
+    player_visual_model.rotation_degrees = Vector3(
+        player_suspension_pitch_deg,
+        180.0,
+        0.0
+    )
+
+    # Tiny vertical compensation keeps the body visually planted while pitching.
+    player_visual_model.position.y = 0.055 - absf(player_suspension_pitch_deg) * 0.0035
 
 
 func _update_ui() -> void:
@@ -1091,6 +1159,9 @@ func _prepare_golf_runtime(car_root: Node3D, paint_color: Color, is_player: bool
 
     var model: Node3D = model_node as Node3D
     _optimize_golf_visuals(model, paint_color)
+
+    if is_player:
+        player_visual_model = model
 
     var wheel_names: Array[String] = [
         "3DWheel Front L",

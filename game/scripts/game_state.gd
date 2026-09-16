@@ -1,6 +1,6 @@
 extends RefCounted
 
-const GAME_VERSION := "v0.4.5"
+const GAME_VERSION := "v0.4.6"
 const SAVE_PATH := "user://night_garage_save.cfg"
 
 # Volkswagen Golf VII 1.2 TSI 85 PS / 5MT baseline.

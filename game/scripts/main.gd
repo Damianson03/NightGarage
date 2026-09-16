@@ -470,7 +470,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  SUSPENSION WEIGHT TRANSFER", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  SUSPENSION + LAUNCH LIFT", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -843,24 +843,60 @@ func _update_player_suspension(delta: float) -> void:
 
     var target_pitch_deg: float = 0.0
 
-    if state.screen == GameState.Screen.RACING and not state.player_finished:
+    if state.screen == GameState.Screen.COUNTDOWN:
+        # While staging, revving toward the green launch zone lightly loads the
+        # rear suspension and raises the nose. The strongest preload is inside
+        # the green zone, then it eases slightly if the engine is over-revved.
+        if state.gas_held:
+            var green_low: float = float(state.launch_green_low())
+            var green_high: float = float(state.launch_green_high())
+            var red_start: float = float(state.launch_red_start())
+            var launch_rpm: float = float(state.rpm)
+
+            if launch_rpm < green_low:
+                var approach: float = clampf(
+                    (launch_rpm - GameState.IDLE_RPM) / maxf(1.0, green_low - GameState.IDLE_RPM),
+                    0.0,
+                    1.0
+                )
+                target_pitch_deg = lerpf(0.0, -0.38, approach)
+            elif launch_rpm <= green_high:
+                target_pitch_deg = -0.52
+            else:
+                var over_rev: float = clampf(
+                    (launch_rpm - green_high) / maxf(1.0, red_start - green_high),
+                    0.0,
+                    1.0
+                )
+                target_pitch_deg = lerpf(-0.52, -0.30, over_rev)
+
+    elif state.screen == GameState.Screen.RACING and not state.player_finished:
         if state.shifting:
             # During the torque interruption the body settles back toward level.
             target_pitch_deg = 0.0
         else:
-            # Positive X pitch raises the front of the car and lowers the rear.
-            # Cap the effect so it reads as suspension movement rather than a stunt.
+            # The imported Golf is rotated 180 degrees around Y, so NEGATIVE X
+            # pitch raises its front and lowers the rear in world view.
             var positive_accel: float = maxf(0.0, longitudinal_accel)
-            target_pitch_deg = clampf(positive_accel * 0.26, 0.0, 1.35)
+            target_pitch_deg = clampf(-positive_accel * 0.26, -1.35, 0.0)
 
-            # Keep a small amount of squat while the car is still pulling hard,
-            # even if frame-to-frame acceleration becomes noisy at high speed.
+            # Keep a visible but subtle rear squat during the hard launch phase,
+            # even if frame-to-frame acceleration becomes noisy.
             if state.race_time < 1.1 and state.speed_kmh > 3.0:
-                target_pitch_deg = maxf(target_pitch_deg, 0.72)
+                target_pitch_deg = minf(target_pitch_deg, -0.72)
 
-    # Critically damped-ish spring. It reacts quickly to a shift but avoids snapping.
-    var spring_strength: float = 105.0 if state.shifting else 72.0
-    var damping: float = 18.5 if state.shifting else 15.5
+    # Spring-damper response: fast enough to read during a gear change, but not
+    # so fast that the body snaps between poses.
+    var spring_strength: float = 72.0
+    var damping: float = 15.5
+
+    if state.shifting:
+        spring_strength = 105.0
+        damping = 18.5
+    elif state.screen == GameState.Screen.COUNTDOWN:
+        spring_strength = 58.0
+        damping = 14.0
+
     var spring_accel: float = (
         (target_pitch_deg - player_suspension_pitch_deg) * spring_strength
         - player_suspension_pitch_velocity * damping
@@ -868,7 +904,7 @@ func _update_player_suspension(delta: float) -> void:
 
     player_suspension_pitch_velocity += spring_accel * safe_delta
     player_suspension_pitch_deg += player_suspension_pitch_velocity * safe_delta
-    player_suspension_pitch_deg = clampf(player_suspension_pitch_deg, -0.18, 1.45)
+    player_suspension_pitch_deg = clampf(player_suspension_pitch_deg, -1.45, 0.18)
 
     _apply_player_suspension_pose()
 

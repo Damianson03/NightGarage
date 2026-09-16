@@ -35,6 +35,7 @@ var rpm_label: Label
 var time_label: Label
 var distance_label: Label
 var zero_to_100_label: Label
+var fps_label: Label
 var rpm_bar: ProgressBar
 var rpm_yellow_low_zone: ColorRect
 var rpm_green_zone: ColorRect
@@ -130,96 +131,101 @@ func _build_world() -> void:
 
 
 func _build_drag_strip_environment() -> void:
+    # Mobile-optimized PBR setup. The main asphalt keeps the real diffuse,
+    # normal and roughness maps, while secondary surfaces use fewer texture
+    # samples. Large road slabs are split into short chunks so lights and
+    # geometry can be culled locally instead of treating the whole 520 m road
+    # as one giant object.
     var shoulder_material := _get_cached_pbr_material(
-        "road_shoulder",
+        "road_shoulder_mobile",
         "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
-        "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(8.0, 130.0, 1.0),
-        Color(0.82, 0.82, 0.84),
-        0.01,
-        0.95,
-        1.55
+        "",
+        "",
+        "",
+        Vector3(2.45, 6.0, 1.0),
+        Color(0.72, 0.73, 0.76),
+        0.0,
+        0.94,
+        0.0
     )
     var road_material := _get_cached_pbr_material(
-        "road_main",
+        "road_main_mobile",
         "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
         "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(4.2, 130.0, 1.0),
+        "",
+        Vector3(3.2, 6.0, 1.0),
         Color(0.98, 0.98, 1.0),
-        0.01,
-        0.82,
-        1.75
+        0.0,
+        0.84,
+        1.35
     )
     var lane_material := _get_cached_pbr_material(
-        "road_lane_gloss",
+        "road_lane_mobile",
         "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(1.0, 114.0, 1.0),
-        Color(0.78, 0.80, 0.88),
-        0.03,
-        0.26,
-        2.00
+        "",
+        "",
+        Vector3(0.72, 6.0, 1.0),
+        Color(0.72, 0.74, 0.82),
+        0.02,
+        0.30,
+        1.15
     )
     var launch_material := _get_cached_pbr_material(
-        "road_launch_box",
+        "road_launch_mobile",
         "res://assets/pbr/road_real/asphalt_02_diff_1k.jpg",
         "res://assets/pbr/road_real/asphalt_02_nor_gl_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_rough_1k.png",
-        "res://assets/pbr/road_real/asphalt_02_ao_1k.jpg",
-        Vector3(3.0, 17.0, 1.0),
-        Color(0.72, 0.74, 0.82),
-        0.03,
-        0.22,
-        2.10
+        "",
+        "",
+        Vector3(0.78, 5.0, 1.0),
+        Color(0.67, 0.69, 0.77),
+        0.02,
+        0.24,
+        1.20
     )
     var concrete_material := _get_cached_pbr_material(
-        "track_concrete",
+        "track_concrete_mobile",
         "res://assets/pbr/road/concrete_albedo.png",
         "res://assets/pbr/road/concrete_normal.png",
-        "res://assets/pbr/road/concrete_roughness.png",
         "",
-        Vector3(2.0, 120.0, 1.0),
-        Color(0.95, 0.95, 0.98),
+        "",
+        Vector3(2.0, 8.0, 1.0),
+        Color(0.92, 0.92, 0.95),
         0.0,
-        0.88,
-        1.0
+        0.90,
+        0.75
     )
 
-    # Dark foundation around the whole scene.
-    # Keep the scene foundation well below the textured road surfaces.
-    # Previous builds accidentally placed its top face at Y=0, covering
-    # every PBR road plane sitting slightly below zero.
+    # Foundation stays well below all visible road surfaces.
     _add_box(
         Vector3(0.0, -0.62, -250.0),
         Vector3(92.0, 0.90, 560.0),
         Color(0.018, 0.020, 0.026),
-        0.10,
+        0.0,
         0.98
     )
 
-    # Asphalt shoulders and main strip.
-    _add_plane(Vector3(0.0, -0.035, -245.0), Vector2(32.0, 520.0), shoulder_material)
-    _add_plane(Vector3(0.0, -0.018, -245.0), Vector2(16.8, 520.0), road_material)
-    _add_plane(Vector3(0.0, -0.010, -245.0), Vector2(12.6, 518.0), road_material)
+    # 26 x 20 m chunks. This removes the previous three full-length
+    # overlapping asphalt planes and dramatically reduces light overdraw.
+    for segment_index in range(26):
+        var segment_z: float = 5.0 - float(segment_index) * 20.0
+        _add_plane(Vector3(0.0, -0.010, segment_z), Vector2(12.6, 20.08), road_material)
+        _add_plane(Vector3(-11.15, -0.035, segment_z), Vector2(9.70, 20.08), shoulder_material)
+        _add_plane(Vector3(11.15, -0.035, segment_z), Vector2(9.70, 20.08), shoulder_material)
 
-    # Polished drag lanes / groove areas.
-    for lane_x in [-1.70, 1.70]:
-        _add_plane(Vector3(lane_x, -0.006, -222.0), Vector2(2.30, 456.0), lane_material)
-        _add_plane(Vector3(lane_x, -0.004, -36.0), Vector2(2.55, 68.0), launch_material)
-        _add_plane(Vector3(lane_x, -0.003, -182.0), Vector2(1.60, 160.0), lane_material)
+    # Separate launch and race-groove sections so they do not stack on top of
+    # another glossy lane layer for the whole track.
+    var lane_positions: Array[float] = [-1.70, 1.70]
+    for lane_index in range(lane_positions.size()):
+        var lane_x: float = lane_positions[lane_index]
+        for launch_index in range(4):
+            var launch_z: float = 0.0 - float(launch_index) * 18.0
+            _add_plane(Vector3(lane_x, -0.004, launch_z), Vector2(2.55, 18.04), launch_material)
 
-    # Damp edge sheen near the outer walls.
-    _add_plane(Vector3(-4.95, -0.008, -245.0), Vector2(1.00, 510.0), lane_material)
-    _add_plane(Vector3(4.95, -0.008, -245.0), Vector2(1.00, 510.0), lane_material)
-
-    # Launch pad / burnout texture variation.
-    _add_plane(Vector3(0.0, -0.002, -18.0), Vector2(11.6, 34.0), launch_material)
+        for groove_index in range(18):
+            var groove_z: float = -78.0 - float(groove_index) * 20.0
+            _add_plane(Vector3(lane_x, -0.006, groove_z), Vector2(2.30, 20.04), lane_material)
 
     # Track lines.
     _add_box(
@@ -227,14 +233,14 @@ func _build_drag_strip_environment() -> void:
         Vector3(0.10, 0.018, 515.0),
         Color(0.93, 0.94, 0.96),
         0.0,
-        0.46
+        0.48
     )
     _add_box(
         Vector3(5.65, 0.014, -245.0),
         Vector3(0.10, 0.018, 515.0),
         Color(0.93, 0.94, 0.96),
         0.0,
-        0.46
+        0.48
     )
 
     for z in range(6, 408, 12):
@@ -243,25 +249,27 @@ func _build_drag_strip_environment() -> void:
             Vector3(0.09, 0.018, 4.0),
             Color(0.96, 0.84, 0.26),
             0.0,
-            0.42
+            0.44
         )
 
     # Tar seams and fine joints.
-    for seam_x in [-3.35, -1.08, 1.08, 3.35]:
+    var seam_positions: Array[float] = [-3.35, -1.08, 1.08, 3.35]
+    for seam_index in range(seam_positions.size()):
+        var seam_x: float = seam_positions[seam_index]
         _add_box(
-            Vector3(seam_x, -0.001, -225.0),
+            Vector3(seam_x, 0.001, -225.0),
             Vector3(0.08, 0.010, 470.0),
             Color(0.022, 0.022, 0.028),
             0.0,
-            0.18
+            0.20
         )
 
     _add_checkered_band(-2.90, 11.6, 0.34)
     _add_checkered_band(-402.34, 11.6, 0.44)
 
-    _add_box(Vector3(0.0, 0.020, -1.15), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.30)
-    _add_box(Vector3(0.0, 0.020, -1.95), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.30)
-    _add_box(Vector3(0.0, 0.020, -5.80), Vector3(11.4, 0.015, 0.10), Color(0.90, 0.90, 0.92), 0.0, 0.35)
+    _add_box(Vector3(0.0, 0.020, -1.15), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.32)
+    _add_box(Vector3(0.0, 0.020, -1.95), Vector3(11.3, 0.015, 0.10), Color(1.0, 1.0, 1.0), 0.0, 0.32)
+    _add_box(Vector3(0.0, 0.020, -5.80), Vector3(11.4, 0.015, 0.10), Color(0.90, 0.90, 0.92), 0.0, 0.38)
 
     _add_start_tree(0.0, -3.80)
     _add_finish_gantry(-402.34)
@@ -269,9 +277,13 @@ func _build_drag_strip_environment() -> void:
     _build_trackside_fences()
     _build_trackside_props()
 
-    for z in range(0, 430, 22):
-        _add_lamp(-7.9, -float(z))
-        _add_lamp(7.9, -float(z))
+    # Keep all lamp models, but only every second pair uses a real OmniLight.
+    # The previous road was one 520 m mesh touched by ~40 OmniLights.
+    for lamp_index in range(20):
+        var lamp_z: float = -float(lamp_index) * 22.0
+        var use_real_light: bool = (lamp_index % 2) == 0
+        _add_lamp(-7.9, lamp_z, use_real_light)
+        _add_lamp(7.9, lamp_z, use_real_light)
 
 
 func _add_checkered_band(z: float, width: float, depth: float) -> void:
@@ -454,7 +466,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  REAL ASPHALT VISIBLE", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  MOBILE OPTIMIZED PBR", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
@@ -596,6 +608,10 @@ func _build_ui() -> void:
 
     zero_to_100_label = _label("0-100: --", Vector2(1015, 108), 20)
     race_panel.add_child(zero_to_100_label)
+
+    fps_label = _label("FPS: --", Vector2(1110, 142), 17)
+    fps_label.modulate = Color(0.72, 0.86, 0.72)
+    race_panel.add_child(fps_label)
 
     rpm_bar = ProgressBar.new()
     rpm_bar.position = Vector2(310, 625)
@@ -814,6 +830,7 @@ func _update_ui() -> void:
         rpm_label.text = "%d RPM" % int(round(state.rpm))
         time_label.text = "%.3f s" % state.race_time
         distance_label.text = "%d / 402 m" % int(round(state.player_distance))
+        fps_label.text = "FPS: %d" % int(Engine.get_frames_per_second())
         rpm_bar.value = state.rpm
         _update_race_progress()
         _update_rpm_zones()
@@ -1272,16 +1289,20 @@ func _create_golf_placeholder(body_color: Color) -> Node3D:
     return root
 
 
-func _add_lamp(x: float, z: float) -> void:
-    _add_box(Vector3(x, 2.7, z), Vector3(0.12, 5.4, 0.12), Color(0.14, 0.15, 0.18), 0.56, 0.52)
-    _add_box(Vector3(x, 5.28, z - 0.56), Vector3(0.64, 0.10, 1.16), Color(0.16, 0.16, 0.18), 0.42, 0.48)
-    _add_box(Vector3(x, 5.10, z - 1.10), Vector3(0.34, 0.14, 0.34), Color(0.98, 0.76, 0.46), 0.0, 0.18)
+func _add_lamp(x: float, z: float, use_real_light: bool) -> void:
+    _add_box(Vector3(x, 2.7, z), Vector3(0.12, 5.4, 0.12), Color(0.14, 0.15, 0.18), 0.42, 0.56)
+    _add_box(Vector3(x, 5.28, z - 0.56), Vector3(0.64, 0.10, 1.16), Color(0.16, 0.16, 0.18), 0.34, 0.52)
+    _add_box(Vector3(x, 5.10, z - 1.10), Vector3(0.34, 0.14, 0.34), Color(1.0, 0.78, 0.48), 0.0, 0.20)
+
+    if not use_real_light:
+        return
 
     var light := OmniLight3D.new()
     light.position = Vector3(x, 5.0, z - 1.00)
     light.light_color = Color(1.0, 0.76, 0.46)
-    light.light_energy = 3.8
-    light.omni_range = 12.0
+    light.light_energy = 4.0
+    light.omni_range = 13.5
+    light.shadow_enabled = false
     add_child(light)
 
 
@@ -1305,7 +1326,7 @@ func _get_cached_pbr_material(
     material.metallic = metallic
     material.roughness = roughness_value
     material.uv1_scale = uv_scale
-    material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+    material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
     material.texture_repeat = true
 
     if ResourceLoader.exists(albedo_path):
@@ -1329,8 +1350,6 @@ func _add_plane(position_value: Vector3, size_value: Vector2, material: Material
     var mesh_instance := MeshInstance3D.new()
     var mesh := PlaneMesh.new()
     mesh.size = size_value
-    mesh.subdivide_width = 6
-    mesh.subdivide_depth = 6
     mesh_instance.mesh = mesh
     mesh_instance.position = position_value
     mesh_instance.material_override = material

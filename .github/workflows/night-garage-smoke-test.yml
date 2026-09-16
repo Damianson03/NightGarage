@@ -51,11 +51,11 @@ jobs:
 
           echo "Night Garage v0.4.5 source installed correctly."
 
-          grep -n "GAME_VERSION" game/scripts/game_state.gd
-          grep -n "road_real" game/scripts/main.gd | head
-          grep -n "foundation well below" game/scripts/main.gd
-          grep -n "_get_cached_pbr_material" game/scripts/main.gd
-          grep -n "version/name" game/export_presets.cfg
+          grep -q 'GAME_VERSION := "v0.4.5"' game/scripts/game_state.gd
+          grep -q 'asphalt_02_diff_1k.jpg' game/scripts/main.gd
+          grep -q 'version/name="0.4.5"' game/export_presets.cfg
+
+          echo "v0.4.5 version and Asphalt 02 references verified."
 
       - name: Commit v0.4.5 source
         shell: bash

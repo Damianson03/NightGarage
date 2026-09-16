@@ -192,9 +192,12 @@ func _build_drag_strip_environment() -> void:
     )
 
     # Dark foundation around the whole scene.
+    # Keep the scene foundation well below the textured road surfaces.
+    # Previous builds accidentally placed its top face at Y=0, covering
+    # every PBR road plane sitting slightly below zero.
     _add_box(
-        Vector3(0.0, -0.50, -250.0),
-        Vector3(92.0, 1.0, 560.0),
+        Vector3(0.0, -0.62, -250.0),
+        Vector3(92.0, 0.90, 560.0),
         Color(0.018, 0.020, 0.026),
         0.10,
         0.98
@@ -451,7 +454,7 @@ func _build_ui() -> void:
     var title := _label("NIGHT GARAGE", Vector2(48, 38), 34)
     garage_panel.add_child(title)
 
-    var version := _label(GameState.GAME_VERSION + "  •  REAL ASPHALT UV FIX", Vector2(50, 82), 17)
+    var version := _label(GameState.GAME_VERSION + "  •  REAL ASPHALT VISIBLE", Vector2(50, 82), 17)
     version.modulate = Color(0.50, 0.82, 1.0)
     garage_panel.add_child(version)
 
